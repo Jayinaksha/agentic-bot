@@ -1,0 +1,24 @@
+# Bridge Lidar to /scan
+-
+  topic_name: "/world/world_demo/model/tugbot/link/scan_front/sensor/scan_front/scan"
+  ros_topic_name: "/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  direction: "GZ_TO_ROS"
+# Bridge Camera to /camera/image_raw
+-
+  topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/color/image"
+  ros_topic_name: "/camera/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  direction: "GZ_TO_ROS"
+# Bridge IMU to /imu/data
+-
+  topic_name: "/world/world_demo/model/tugbot/link/imu_link/sensor/imu/imu"
+  ros_topic_name: "/imu/data"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  direction: "GZ_TO_ROS"
+# Bridge the clock (very important!)
+-
+  topic_name: "/clock"
+  ros_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  direction: "GZ_TO_ROS"

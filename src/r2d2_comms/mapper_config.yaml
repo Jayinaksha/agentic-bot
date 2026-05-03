@@ -1,0 +1,14 @@
+slam_toolbox:
+  ros__parameters:
+    # Essential Parameters
+    use_sim_time: false
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+
+    # Tuning for laser_scan_matcher odometry
+    minimum_travel_distance: 0.05
+    minimum_travel_heading: 0.02
+    transform_publish_period: 0.05
+    use_scan_matching: true
