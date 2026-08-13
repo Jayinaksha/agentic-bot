@@ -13,7 +13,9 @@ Open `docs/index.html` in any browser.
 
 The page is static, so anything that serves files will host it. To use GitHub Pages:
 **Settings → Pages → Source: Deploy from a branch → `main` / `/docs`**. It will be
-served at `https://jayinaksha.github.io/agentic-bot/`.
+served at `https://jayinaksha.github.io/agentic-bot/`. The empty `.nojekyll` file
+next to this one tells Pages to serve the directory as-is instead of running it
+through Jekyll.
 
 ## Editing it
 
