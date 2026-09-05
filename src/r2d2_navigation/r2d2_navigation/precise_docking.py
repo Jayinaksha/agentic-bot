@@ -39,8 +39,14 @@ stack, so no custom action package is needed.
                         "residual_m": 0.014, "yaw_error_rad": 0.008}
 
 Safety: the servo commands through /cmd_vel_nav like everything else, so the
-climb FSM and the collision monitor still gate it. It gives up rather than
-grinding if the feature disappears or the residual stops shrinking.
+climb FSM still gates it. It gives up rather than grinding if the feature
+disappears or the residual stops shrinking.
+
+Contention: Nav2's velocity chain also writes /cmd_vel_nav. Docking must
+therefore only run with no active Nav2 goal - the MCP tool cancels navigation
+before requesting a dock, and waits out velocity_smoother's velocity_timeout so
+the chain has fallen silent. Driving both at once makes the robot twitch between
+two controllers and neither converges.
 """
 
 import json

@@ -366,6 +366,13 @@ if mcp is not None:
                            f'{bridge.health.get("dead_reckoning_drift_estimate", "?")} m. '
                            f'Drive around to relocalise before docking.')})
 
+        # Cancel any live Nav2 goal first. The docking servo and Nav2's
+        # velocity chain both write /cmd_vel_nav, so an active goal would have
+        # the two fighting for the wheels. Nav2's chain falls silent about a
+        # second after its last command (velocity_smoother.velocity_timeout),
+        # which the docking client's startup delay covers.
+        await bridge.cancel_navigation()
+
         from r2d2_mcp.docking_client import run_docking
         result = await run_docking(bridge, math.radians(bearing_deg), target,
                                    standoff, timeout_s=_config.dock_timeout_s)

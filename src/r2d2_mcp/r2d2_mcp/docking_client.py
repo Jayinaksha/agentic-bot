@@ -42,9 +42,12 @@ async def run_docking(bridge, bearing_rad: float, target: str,
     publisher = bridge.node.create_publisher(String, '/docking/request', 10)
 
     try:
-        # The servo node subscribes on demand; give discovery a moment so the
-        # first request of a session is not silently dropped.
-        await asyncio.sleep(0.3)
+        # Two reasons to wait before publishing: the servo node subscribes on
+        # demand, so the first request of a session would otherwise be dropped
+        # by discovery; and Nav2's velocity chain keeps writing /cmd_vel_nav for
+        # up to velocity_smoother.velocity_timeout (1.0 s) after its goal is
+        # cancelled, which would fight the servo for the wheels.
+        await asyncio.sleep(1.2)
         message = String()
         message.data = json.dumps({
             'id': request_id,

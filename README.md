@@ -1,5 +1,108 @@
 # R2-D2 Redux: An Embodied, Reasoning Robotic Assistant
 
+Two stacks live in this repository.
+
+**v2 (current)** — a tri-star stair-climbing rover that navigates a two-storey
+house in Gazebo, with MCP tool calling in place of one-shot JSON planning, NVIDIA
+open models for reasoning and vision, and an event-sourced memory on NATS
+JetStream projected into Postgres/pgvector.
+See **[docs/ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md)**.
+
+**v1 (original)** — the distributed robot/supercomputer/laptop system described
+further down. Still present and still works; v2 does not delete it.
+
+---
+
+## v2 quick start
+
+```bash
+# 1. build
+cd ~/agentic-bot && colcon build --symlink-install && source install/setup.bash
+
+# 2. drive it around a two-storey house
+ros2 launch r2d2_navigation house_stack.launch.py mode:=slam
+
+# 3. map each floor, then navigate
+ros2 run nav2_map_server map_saver_cli -f ~/r2d2_maps/house_f0
+ros2 launch r2d2_navigation house_stack.launch.py mode:=amcl
+
+# 4. memory backends
+docker compose -f src/r2d2_memory/docker-compose.yml up -d
+
+# 5. perception + memory bridge
+export R2D2_NVIDIA_API_KEY=nvapi-...
+ros2 launch r2d2_perception perception.launch.py
+
+# 6. talk to it
+python3 -m r2d2_mcp.agent "go upstairs and tell me what is on the desk"
+python3 -m r2d2_mcp.agent --dry-run "..."      # plan without moving
+```
+
+### v2 packages
+
+| Package | What it does |
+|---|---|
+| `r2d2_description` | Tri-star cluster rover: 4 clusters, 2D LiDAR, IMU, 4 ToF beams, camera, anti-tip tail |
+| `r2d2_sim` | Parametric two-storey house world (rooms, stairs, ramp, sills) + Gazebo bring-up |
+| `r2d2_locomotion` | `/cmd_vel` → 16 joints, rolling/tumbling transmission, terrain classification, stair-climb FSM |
+| `r2d2_localization` | EKF fusing wheel + scan-match + IMU, regime gating, per-floor map management |
+| `r2d2_navigation` | Nav2 (RPP + Smac 2D), cross-floor route planning, centimetre docking servo |
+| `r2d2_perception` | Cosmos Reason 2 detections grounded into map coordinates via the LiDAR |
+| `r2d2_memory` | Hash-chained JetStream ledger + pgvector projection |
+| `r2d2_mcp` | The robot as MCP tools, and the agent that drives them |
+
+### Sensors, and their cost
+
+| Sensor | Count | Approx. cost | Used for |
+|---|---|---|---|
+| 2D LiDAR (RPLIDAR A1 class) | 1 | $99 | SLAM, scan matching, obstacles, ranging detections |
+| 6-axis IMU (MPU6050/BNO085) | 1 | $5–25 | Attitude, climb detection, EKF, dead reckoning |
+| Downward ToF (VL53L0X) | 4 | $12 | Steps, cliffs, stair edges |
+| RGB camera | 1 | $15 | VLA grounding, semantic map |
+
+No depth camera and no 3D LiDAR. Terrain understanding comes from fusing IMU
+attitude with the four ToF beams — roughly 1/20th the cost and a small fraction
+of the CPU of an RGB-D traversability pipeline.
+
+### Configuration
+
+```bash
+# Planner and VLA. Both are OpenAI-compatible, so either the NVIDIA-hosted
+# catalogue or your own NIM/vLLM on a cloud GPU works with the same code.
+export R2D2_NVIDIA_API_KEY=nvapi-...
+export R2D2_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+export R2D2_LLM_MODEL=nvidia/nemotron-nano-12b-v2-vl
+export R2D2_VLA_MODEL=nvidia/cosmos-reason2-8b
+
+# Self-hosted instead:
+# export R2D2_LLM_BASE_URL=http://10.0.0.5:8000/v1
+
+# Memory (optional; the robot drives without it)
+export R2D2_NATS_URL=nats://127.0.0.1:4222
+export R2D2_PG_DSN=postgresql://r2d2:r2d2@127.0.0.1:5432/r2d2
+export R2D2_MEMORY=on
+```
+
+### Tests
+
+189 unit tests covering the geometry and control logic, none of which need ROS,
+Gazebo, NATS, Postgres or a model endpoint:
+
+```bash
+python3 -m pytest src/r2d2_locomotion/test src/r2d2_navigation/test \
+                  src/r2d2_memory/test src/r2d2_perception/test \
+                  src/r2d2_mcp/test -q
+```
+
+> **The v2 stack has not been run on hardware or in simulation.** The maths and
+> control logic are unit-tested; the ROS graph, Gazebo physics and Nav2
+> parameters are not. Start with the bring-up order in
+> [docs/ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md#suggested-bring-up-order).
+
+---
+
+# v1: the original distributed system
+
 This project is the complete software architecture for an R2-D2-like autonomous robot that uses Large Language and Vision Models to understand and act upon natural language commands.
 
 ### Architecture Overview
