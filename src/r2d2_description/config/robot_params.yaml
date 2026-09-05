@@ -1,0 +1,62 @@
+# ---------------------------------------------------------------------------
+# R2D2-Redux v2 physical design envelope
+#
+# The platform is a 4x curved-spoke tri-star (star-wheel) skid-steer rover.
+# Every dimension below is derived from the stair-climbing constraint reported
+# in the tri-wheel literature: a star-wheel cluster can only mount a step when
+# its *reach* (cluster circumradius + sub-wheel radius) exceeds the step riser
+# by a healthy margin. Undersizing this is the single most common reason these
+# platforms fail to climb, so the numbers are kept in one place and consumed by
+# BOTH the URDF and the Gazebo world generator -- the simulated staircase is
+# built from the same constants the robot is built from.
+# ---------------------------------------------------------------------------
+
+platform:
+  # --- tri-star cluster geometry ---
+  sub_wheel_radius: 0.050        # m, radius of each of the 3 sub-wheels
+  sub_wheel_width: 0.040         # m
+  cluster_circumradius: 0.115    # m, cluster axle -> sub-wheel axle
+  spokes: 3                      # tri-star
+  # reach = 0.115 + 0.050 = 0.165 m  (see stairs.riser below)
+
+  # --- chassis ---
+  body_length: 0.360             # m
+  body_width: 0.300              # m
+  body_height: 0.120             # m
+  body_mass: 6.0                 # kg
+  cluster_mass: 0.45             # kg, per cluster assembly
+  track_width: 0.340             # m, left cluster axle <-> right cluster axle
+  wheelbase: 0.260               # m, front cluster axle <-> rear cluster axle
+  axle_height: 0.120             # m, cluster axle above ground when settled
+
+  # --- passive anti-tip tail ---
+  # Tri-wheel platforms pitch backwards hard at the moment the front clusters
+  # tumble onto a riser. A trailing tail converts that into a supported pitch.
+  tail_length: 0.220             # m
+  tail_mass: 0.30                # kg
+  tail_rest_pitch: -0.35         # rad, droop when unloaded
+
+  # --- actuation limits ---
+  max_wheel_rate: 12.0           # rad/s, sub-wheel velocity (rolling mode)
+  max_cluster_rate: 3.5          # rad/s, cluster velocity (tumbling mode)
+  max_linear_vel: 0.55           # m/s on flat ground
+  max_angular_vel: 1.6           # rad/s
+  climb_linear_vel: 0.12         # m/s effective while tumbling up stairs
+
+# Staircase the robot is designed to climb. The world generator reads these to
+# build a staircase the platform can actually mount -- change them in one place
+# and the sim stays self-consistent.
+stairs:
+  riser: 0.150                   # m; must stay < cluster reach (0.165 m)
+  tread: 0.280                   # m; must stay > sub-wheel diameter (0.100 m)
+  width: 0.900                   # m
+  steps: 12                      # 12 x 0.15 = 1.80 m floor-to-floor
+  # climb margin = (0.165 - 0.150) / 0.150 = 10 %
+
+# Safety envelope enforced by r2d2_locomotion/terrain_monitor.
+limits:
+  max_pitch_flat: 0.17           # rad (~10 deg) before slope mode engages
+  max_pitch_climb: 0.70          # rad (~40 deg) hard e-stop while climbing
+  max_roll: 0.35                 # rad (~20 deg) hard e-stop, any mode
+  cliff_drop: 0.060              # m, ToF delta that counts as a fall hazard
+  step_up_min: 0.035             # m, below this is a threshold, not a step

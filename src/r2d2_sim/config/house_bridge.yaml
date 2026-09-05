@@ -1,0 +1,77 @@
+# ros_gz_bridge configuration for the two-storey house world.
+#
+# Only sensor traffic and the clock cross the bridge. Drive commands do NOT:
+# the robot is actuated through gz_ros2_control, which lives inside the Gazebo
+# process, so /cmd_vel never has to make a round trip through the bridge. That
+# keeps the control loop deterministic and is the main reason this stack holds
+# a real-time factor near 1.0 on a laptop.
+
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/scan"
+  gz_topic_name: "/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/imu/data"
+  gz_topic_name: "/imu/data"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/image_raw"
+  gz_topic_name: "/camera/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/camera_info"
+  gz_topic_name: "/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# Four downward Time-of-Flight beams (single-ray lidars).
+- ros_topic_name: "/tof/front_left"
+  gz_topic_name: "/tof_fl"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/tof/front_right"
+  gz_topic_name: "/tof_fr"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/tof/rear_left"
+  gz_topic_name: "/tof_rl"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/tof/rear_right"
+  gz_topic_name: "/tof_rr"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+# Ground-truth pose, for evaluating localisation error only. Nothing in the
+# navigation stack is allowed to subscribe to this.
+- ros_topic_name: "/sim/ground_truth/pose"
+  gz_topic_name: "/model/r2d2_tristar/pose"
+  ros_type_name: "geometry_msgs/msg/PoseArray"
+  gz_type_name: "gz.msgs.Pose_V"
+  direction: GZ_TO_ROS
+
+# Anti-tip tail spring setpoint.
+- ros_topic_name: "/tail_position_cmd"
+  gz_topic_name: "/tail_position_cmd"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "gz.msgs.Double"
+  direction: ROS_TO_GZ

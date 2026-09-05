@@ -1,0 +1,168 @@
+<?xml version="1.0"?>
+<!--
+  Sensor suite. Deliberately minimal and cheap - this is the whole perception
+  budget for the platform:
+
+    1x 2D LiDAR      (RPLIDAR A1 class, ~USD 99)  : SLAM, scan matching, obstacles
+    1x 6-axis IMU    (MPU6050/BNO085, ~USD 5-25)  : attitude, climb detection, EKF
+    4x downward ToF  (VL53L0X, ~USD 3 each)       : step / cliff / stair-edge sensing
+    1x RGB camera    (Pi Cam / USB, ~USD 15)      : VLA grounding, semantic map
+
+  There is no depth camera and no 3D LiDAR. Terrain understanding comes from
+  fusing IMU attitude with the four ToF beams (r2d2_locomotion/terrain_monitor),
+  which is roughly 1/20th the cost and a small fraction of the CPU of an RGB-D
+  traversability pipeline.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Generic sensor mount link with negligible inertia. -->
+  <xacro:macro name="sensor_link" params="name parent x y z roll pitch yaw size mass:=0.05">
+    <link name="${name}">
+      <visual>
+        <geometry><box size="${size}"/></geometry>
+        <material name="sensor_navy"><color rgba="0.1 0.2 0.4 1"/></material>
+      </visual>
+      <inertial>
+        <mass value="${mass}"/>
+        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+      </inertial>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${name}"/>
+      <origin xyz="${x} ${y} ${z}" rpy="${roll} ${pitch} ${yaw}"/>
+    </joint>
+  </xacro:macro>
+
+  <!--
+    One downward-angled Time-of-Flight beam, simulated as a single-ray gpu_lidar.
+    Mounted at the chassis corners looking forward-down at `tilt` radians.
+
+    Flat ground gives a constant expected range; a step-up shortens it, a
+    step-down or stair edge lengthens it. terrain_monitor turns those deltas
+    into "climbable step" vs "fall hazard".
+  -->
+  <xacro:macro name="tof_sensor" params="name parent x y z yaw tilt max_range:=1.0">
+    <xacro:sensor_link name="${name}" parent="${parent}"
+                       x="${x}" y="${y}" z="${z}"
+                       roll="0" pitch="${tilt}" yaw="${yaw}"
+                       size="0.012 0.012 0.006" mass="0.005"/>
+    <gazebo reference="${name}">
+      <sensor name="${name}_sensor" type="gpu_lidar">
+        <update_rate>30</update_rate>
+        <topic>${name}</topic>
+        <gz_frame_id>${name}</gz_frame_id>
+        <always_on>1</always_on>
+        <lidar>
+          <scan>
+            <horizontal><samples>1</samples><min_angle>0</min_angle><max_angle>0</max_angle></horizontal>
+            <vertical><samples>1</samples><min_angle>0</min_angle><max_angle>0</max_angle></vertical>
+          </scan>
+          <range><min>0.02</min><max>${max_range}</max><resolution>0.002</resolution></range>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.004</stddev></noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- Full suite, attached to `parent` (base_link). -->
+  <xacro:macro name="r2d2_sensors" params="parent body_l body_w body_h">
+
+    <!-- 2D LiDAR on the mast. Mounted high enough to clear the tri-star
+         clusters at full tumble, low enough to see chair legs and doorframes. -->
+    <xacro:sensor_link name="laser" parent="${parent}"
+                       x="0.06" y="0" z="${body_h/2 + 0.14}"
+                       roll="0" pitch="0" yaw="0"
+                       size="0.07 0.07 0.045" mass="0.18"/>
+    <gazebo reference="laser">
+      <sensor name="laser_sensor" type="gpu_lidar">
+        <update_rate>10</update_rate>
+        <topic>scan</topic>
+        <gz_frame_id>laser</gz_frame_id>
+        <always_on>1</always_on>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>720</samples>
+              <resolution>1</resolution>
+              <min_angle>-3.14159</min_angle>
+              <max_angle>3.14159</max_angle>
+            </horizontal>
+          </scan>
+          <range><min>0.15</min><max>12.0</max><resolution>0.01</resolution></range>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.012</stddev></noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+
+    <!-- IMU at the chassis centre of mass, so pitch reads body attitude and not
+         a lever-arm artefact during a tumble. -->
+    <xacro:sensor_link name="imu_link" parent="${parent}"
+                       x="0" y="0" z="0.01"
+                       roll="0" pitch="0" yaw="0"
+                       size="0.02 0.02 0.006" mass="0.02"/>
+    <gazebo reference="imu_link">
+      <sensor name="imu_sensor" type="imu">
+        <update_rate>100</update_rate>
+        <topic>imu/data</topic>
+        <gz_frame_id>imu_link</gz_frame_id>
+        <always_on>1</always_on>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.0018</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.0018</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.0018</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.018</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.018</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.018</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </gazebo>
+
+    <!-- Forward RGB camera for the VLA. 640x480 is plenty; Cosmos Reason 2 is
+         resolution-tolerant and smaller frames keep the uplink cheap. -->
+    <xacro:sensor_link name="camera_link" parent="${parent}"
+                       x="${body_l/2 - 0.005}" y="0" z="${body_h/2 + 0.05}"
+                       roll="0" pitch="0" yaw="0"
+                       size="0.02 0.05 0.02" mass="0.05"/>
+    <gazebo reference="camera_link">
+      <sensor name="camera_sensor" type="camera">
+        <update_rate>15</update_rate>
+        <topic>camera/image_raw</topic>
+        <gz_frame_id>camera_link</gz_frame_id>
+        <always_on>1</always_on>
+        <camera>
+          <horizontal_fov>1.089</horizontal_fov>
+          <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+          <clip><near>0.05</near><far>20.0</far></clip>
+          <noise><type>gaussian</type><mean>0</mean><stddev>0.005</stddev></noise>
+        </camera>
+      </sensor>
+    </gazebo>
+
+    <!-- Four ToF beams. Front pair looks ahead-down for risers and stair edges;
+         rear pair guards reversing and descent. -->
+    <!-- Mounted at the top of the end faces and tilted 30 deg below horizontal.
+         With the chassis top 0.18 m above ground that puts the ground spot
+         0.31 m ahead of the sensor, which is roughly one cluster-diameter of
+         lookahead: far enough to react, near enough that the beam still lands
+         on the floor rather than on a distant wall. -->
+    <xacro:tof_sensor name="tof_fl" parent="${parent}"
+                      x="${body_l/2}" y="${body_w/2 - 0.03}" z="${body_h/2}"
+                      yaw="0" tilt="0.5236" max_range="1.5"/>
+    <xacro:tof_sensor name="tof_fr" parent="${parent}"
+                      x="${body_l/2}" y="${-body_w/2 + 0.03}" z="${body_h/2}"
+                      yaw="0" tilt="0.5236" max_range="1.5"/>
+    <xacro:tof_sensor name="tof_rl" parent="${parent}"
+                      x="${-body_l/2}" y="${body_w/2 - 0.03}" z="${body_h/2}"
+                      yaw="3.14159" tilt="0.5236" max_range="1.5"/>
+    <xacro:tof_sensor name="tof_rr" parent="${parent}"
+                      x="${-body_l/2}" y="${-body_w/2 + 0.03}" z="${body_h/2}"
+                      yaw="3.14159" tilt="0.5236" max_range="1.5"/>
+
+  </xacro:macro>
+
+</robot>

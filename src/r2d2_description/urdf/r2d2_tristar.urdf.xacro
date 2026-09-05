@@ -1,0 +1,189 @@
+<?xml version="1.0"?>
+<!--
+  R2D2-Redux v2: 4x tri-star cluster skid-steer rover.
+
+  Kinematically this is still a differential drive: the controller reduces
+  /cmd_vel to a left-side and a right-side rate exactly as a two-wheel diff
+  drive would. That is the whole point of choosing tri-star clusters over a
+  legged design - Nav2, slam_toolbox, the laser scan matcher and the existing
+  ESP32 firmware all keep working unchanged, and the stair capability is bought
+  purely in the mechanism plus a transmission-mode switch.
+
+  Build:  xacro r2d2_tristar.urdf.xacro > robot.urdf
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="r2d2_tristar">
+
+  <xacro:arg name="use_sim" default="true"/>
+  <xacro:arg name="params_file" default="$(find r2d2_description)/config/robot_params.yaml"/>
+
+  <xacro:property name="cfg" value="${xacro.load_yaml('$(arg params_file)')}"/>
+  <xacro:property name="p" value="${cfg['platform']}"/>
+
+  <xacro:property name="body_l"    value="${p['body_length']}"/>
+  <xacro:property name="body_w"    value="${p['body_width']}"/>
+  <xacro:property name="body_h"    value="${p['body_height']}"/>
+  <xacro:property name="body_m"    value="${p['body_mass']}"/>
+  <xacro:property name="r_sub"     value="${p['sub_wheel_radius']}"/>
+  <xacro:property name="w_sub"     value="${p['sub_wheel_width']}"/>
+  <xacro:property name="r_clu"     value="${p['cluster_circumradius']}"/>
+  <xacro:property name="m_clu"     value="${p['cluster_mass']}"/>
+  <xacro:property name="track"     value="${p['track_width']}"/>
+  <xacro:property name="wbase"     value="${p['wheelbase']}"/>
+  <xacro:property name="axle_z"    value="${p['axle_height']}"/>
+  <xacro:property name="tail_l"    value="${p['tail_length']}"/>
+  <xacro:property name="tail_m"    value="${p['tail_mass']}"/>
+
+  <xacro:include filename="$(find r2d2_description)/urdf/tristar_cluster.xacro"/>
+  <xacro:include filename="$(find r2d2_description)/urdf/sensors.xacro"/>
+
+  <!-- base_footprint sits on the ground plane; base_link at the chassis centre. -->
+  <link name="base_footprint"/>
+
+  <link name="base_link">
+    <visual>
+      <geometry><box size="${body_l} ${body_w} ${body_h}"/></geometry>
+      <material name="chassis_white"><color rgba="0.92 0.92 0.95 1"/></material>
+    </visual>
+    <collision>
+      <geometry><box size="${body_l} ${body_w} ${body_h}"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="${body_m}"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="${body_m*(body_w*body_w + body_h*body_h)/12}" ixy="0" ixz="0"
+               iyy="${body_m*(body_l*body_l + body_h*body_h)/12}" iyz="0"
+               izz="${body_m*(body_l*body_l + body_w*body_w)/12}"/>
+    </inertial>
+  </link>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${axle_z}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Four clusters. Left and right sides run a 60 deg phase offset so that a
+       synchronous tumble never lifts both sides at the same instant. -->
+  <xacro:tristar_cluster prefix="front_left"  parent="base_link"
+      x="${ wbase/2}" y="${ track/2}" z="0" phase="0"
+      r_sub="${r_sub}" w_sub="${w_sub}" r_cluster="${r_clu}" mass="${m_clu}"/>
+  <xacro:tristar_cluster prefix="front_right" parent="base_link"
+      x="${ wbase/2}" y="${-track/2}" z="0" phase="${pi/3}"
+      r_sub="${r_sub}" w_sub="${w_sub}" r_cluster="${r_clu}" mass="${m_clu}"/>
+  <xacro:tristar_cluster prefix="rear_left"   parent="base_link"
+      x="${-wbase/2}" y="${ track/2}" z="0" phase="${pi/3}"
+      r_sub="${r_sub}" w_sub="${w_sub}" r_cluster="${r_clu}" mass="${m_clu}"/>
+  <xacro:tristar_cluster prefix="rear_right"  parent="base_link"
+      x="${-wbase/2}" y="${-track/2}" z="0" phase="0"
+      r_sub="${r_sub}" w_sub="${w_sub}" r_cluster="${r_clu}" mass="${m_clu}"/>
+
+  <!--
+    Passive anti-tip tail. When the front clusters tumble onto a riser the CoM
+    swings behind the rear axle and the platform wants to flip. A trailing,
+    lightly sprung tail catches that. Modelled as a revolute joint with a spring
+    reference so it droops when unloaded and loads up during the climb; this is
+    the tail-mechanism result from the tri-wheel stair-climbing literature.
+  -->
+  <link name="tail_link">
+    <visual>
+      <origin xyz="${-tail_l/2} 0 0" rpy="0 ${pi/2} 0"/>
+      <geometry><cylinder radius="0.012" length="${tail_l}"/></geometry>
+      <material name="tail_grey"><color rgba="0.3 0.3 0.3 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="${-tail_l} 0 0"/>
+      <geometry><sphere radius="0.025"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="${tail_m}"/>
+      <origin xyz="${-tail_l/2} 0 0"/>
+      <inertia ixx="1e-4" ixy="0" ixz="0"
+               iyy="${tail_m*tail_l*tail_l/12}" iyz="0"
+               izz="${tail_m*tail_l*tail_l/12}"/>
+    </inertial>
+  </link>
+
+  <joint name="tail_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="tail_link"/>
+    <origin xyz="${-body_l/2} 0 ${-body_h/4}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.9" upper="0.5" effort="12.0" velocity="4.0"/>
+    <dynamics damping="0.9" friction="0.1"/>
+  </joint>
+
+  <gazebo reference="tail_link">
+    <mu1>0.6</mu1><mu2>0.6</mu2>
+  </gazebo>
+
+  <!-- Torsional spring holding the tail against the ground. -->
+  <gazebo>
+    <plugin filename="gz-sim-joint-position-controller-system"
+            name="gz::sim::systems::JointPositionController">
+      <joint_name>tail_joint</joint_name>
+      <p_gain>6.0</p_gain>
+      <i_gain>0.0</i_gain>
+      <d_gain>1.2</d_gain>
+      <initial_position>${p['tail_rest_pitch']}</initial_position>
+      <topic>tail_position_cmd</topic>
+    </plugin>
+  </gazebo>
+
+  <xacro:r2d2_sensors parent="base_link" body_l="${body_l}" body_w="${body_w}" body_h="${body_h}"/>
+
+  <!--
+    ros2_control. All 16 drive joints are exposed as velocity interfaces and
+    driven by a single JointGroupVelocityController; tristar_controller.py
+    decides, per cluster and per control cycle, whether the carrier joint or the
+    three sub-wheel joints receive the command and which set is held at zero.
+    Doing the arbitration in one node (rather than in a custom hardware
+    interface) keeps the same code path usable against the real ESP32 later.
+  -->
+  <ros2_control name="r2d2_tristar_system" type="system">
+    <hardware>
+      <xacro:if value="$(arg use_sim)">
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </xacro:if>
+      <xacro:unless value="$(arg use_sim)">
+        <!-- Replaced by the micro-ROS / serial bridge on the real robot. -->
+        <plugin>mock_components/GenericSystem</plugin>
+      </xacro:unless>
+    </hardware>
+
+    <xacro:macro name="cluster_ctl" params="prefix">
+      <joint name="${prefix}_carrier_joint">
+        <command_interface name="velocity"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="${prefix}_wheel0_joint">
+        <command_interface name="velocity"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="${prefix}_wheel1_joint">
+        <command_interface name="velocity"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="${prefix}_wheel2_joint">
+        <command_interface name="velocity"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+    </xacro:macro>
+
+    <xacro:cluster_ctl prefix="front_left"/>
+    <xacro:cluster_ctl prefix="front_right"/>
+    <xacro:cluster_ctl prefix="rear_left"/>
+    <xacro:cluster_ctl prefix="rear_right"/>
+  </ros2_control>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find r2d2_locomotion)/config/controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+</robot>

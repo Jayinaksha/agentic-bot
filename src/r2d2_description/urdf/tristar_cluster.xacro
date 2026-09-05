@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<!--
+  A single tri-star (star-wheel) cluster.
+
+  Mechanism, and why it is modelled this way:
+
+    Each cluster is a triangular carrier with three sub-wheels at its vertices.
+    A real curved-spoke tri-wheel uses one motor and a planetary train where a
+    torque threshold decides whether the sub-wheels spin (flat ground) or the
+    whole carrier tumbles over an obstacle (stairs). Simulating a passive
+    torque-threshold clutch is fragile, so the two states are modelled
+    explicitly:
+
+      ROLLING  -> the three sub-wheel joints are driven, the carrier joint is
+                  velocity-held at 0. Behaves exactly like a normal wheel of
+                  radius r_sub. Wheel odometry is valid here.
+      TUMBLING -> the carrier joint is driven, the sub-wheel joints are
+                  velocity-held at 0. The cluster walks over the riser.
+                  Wheel odometry is NOT valid here (see odom_supervisor).
+
+    r2d2_locomotion/tristar_controller.py owns that switch.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- One sub-wheel, mounted on its carrier at `angle` around the cluster axle. -->
+  <xacro:macro name="tristar_sub_wheel" params="prefix idx angle r_sub w_sub r_cluster mass">
+    <link name="${prefix}_wheel${idx}">
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${r_sub}" length="${w_sub}"/></geometry>
+        <material name="tyre_black"><color rgba="0.08 0.08 0.09 1"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${r_sub}" length="${w_sub}"/></geometry>
+      </collision>
+      <inertial>
+        <mass value="${mass}"/>
+        <origin xyz="0 0 0"/>
+        <inertia ixx="${mass*r_sub*r_sub/4}" ixy="0" ixz="0"
+                 iyy="${mass*r_sub*r_sub/2}" iyz="0"
+                 izz="${mass*r_sub*r_sub/4}"/>
+      </inertial>
+    </link>
+
+    <joint name="${prefix}_wheel${idx}_joint" type="continuous">
+      <parent link="${prefix}_carrier"/>
+      <child link="${prefix}_wheel${idx}"/>
+      <!-- Sub-wheel axles sit on the carrier circumradius, in the x-z plane. -->
+      <origin xyz="${r_cluster*cos(angle)} 0 ${r_cluster*sin(angle)}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.02" friction="0.01"/>
+    </joint>
+
+    <!-- High friction on the sub-wheels only; the carrier hub must never grip. -->
+    <gazebo reference="${prefix}_wheel${idx}">
+      <mu1>1.4</mu1>
+      <mu2>1.2</mu2>
+      <kp>1e6</kp>
+      <kd>50.0</kd>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- A complete cluster: carrier + 3 sub-wheels. -->
+  <xacro:macro name="tristar_cluster"
+               params="prefix parent x y z r_sub w_sub r_cluster mass phase">
+
+    <link name="${prefix}_carrier">
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${r_cluster*0.45}" length="${w_sub*0.6}"/></geometry>
+        <material name="carrier_grey"><color rgba="0.25 0.25 0.28 1"/></material>
+      </visual>
+      <collision>
+        <!-- Deliberately smaller than the visual: only sub-wheels may touch. -->
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${r_cluster*0.30}" length="${w_sub*0.5}"/></geometry>
+      </collision>
+      <inertial>
+        <mass value="${mass*0.4}"/>
+        <origin xyz="0 0 0"/>
+        <inertia ixx="${mass*0.4*r_cluster*r_cluster/4}" ixy="0" ixz="0"
+                 iyy="${mass*0.4*r_cluster*r_cluster/2}" iyz="0"
+                 izz="${mass*0.4*r_cluster*r_cluster/4}"/>
+      </inertial>
+    </link>
+
+    <joint name="${prefix}_carrier_joint" type="continuous">
+      <parent link="${parent}"/>
+      <child link="${prefix}_carrier"/>
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.08" friction="0.05"/>
+    </joint>
+
+    <gazebo reference="${prefix}_carrier">
+      <mu1>0.05</mu1>
+      <mu2>0.05</mu2>
+    </gazebo>
+
+    <!-- Left and right clusters are phase-offset (see `phase`) so the platform
+         keeps diagonal support through a tumble - the same reason RHex runs an
+         alternating tripod instead of a synchronous gait. -->
+    <xacro:tristar_sub_wheel prefix="${prefix}" idx="0" angle="${phase + 0}"
+        r_sub="${r_sub}" w_sub="${w_sub}" r_cluster="${r_cluster}" mass="${mass*0.2}"/>
+    <xacro:tristar_sub_wheel prefix="${prefix}" idx="1" angle="${phase + 2*pi/3}"
+        r_sub="${r_sub}" w_sub="${w_sub}" r_cluster="${r_cluster}" mass="${mass*0.2}"/>
+    <xacro:tristar_sub_wheel prefix="${prefix}" idx="2" angle="${phase + 4*pi/3}"
+        r_sub="${r_sub}" w_sub="${w_sub}" r_cluster="${r_cluster}" mass="${mass*0.2}"/>
+
+  </xacro:macro>
+
+</robot>
