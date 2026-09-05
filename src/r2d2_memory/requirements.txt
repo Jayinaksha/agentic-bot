@@ -1,0 +1,13 @@
+# Memory layer dependencies.
+#
+#   pip install -r src/r2d2_memory/requirements.txt
+#
+# Everything here is optional at runtime: ledger.py falls back to NullLedger and
+# embeddings.py to a hashing embedder when a package is missing, so the robot
+# still drives without any of it. What you lose is recall, not mobility.
+
+nats-py>=2.6.0          # JetStream ledger client
+asyncpg>=0.29.0         # async Postgres driver
+pgvector>=0.2.5         # vector type helpers (optional; raw SQL is used)
+sentence-transformers>=2.6.0   # local 384-d embeddings, CPU is fine
+httpx>=0.27.0           # remote embedding / NIM endpoints

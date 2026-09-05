@@ -1,0 +1,67 @@
+# Memory backends for R2D2-Redux v2.
+#
+#     docker compose up -d
+#     psql "postgresql://r2d2:r2d2@127.0.0.1:5432/r2d2" -f r2d2_memory/schema.sql
+#
+# Both services are small enough to run on the same laptop as Gazebo. If you
+# move them to a server, set R2D2_NATS_URL and R2D2_PG_DSN on the robot.
+
+name: r2d2-memory
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    container_name: r2d2-nats
+    restart: unless-stopped
+    command:
+      - "--jetstream"
+      - "--store_dir=/data"
+      - "--http_port=8222"
+      # 8 GB ceiling matches ledger.py's DEFAULT_MAX_BYTES. The ledger is
+      # append-only, so this is the one place its growth is actually bounded.
+      - "--max_file_store=8GB"
+      - "--max_memory_store=256MB"
+    ports:
+      - "4222:4222"     # client
+      - "8222:8222"     # monitoring: curl localhost:8222/jsz?streams=1
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: r2d2-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: r2d2
+      POSTGRES_PASSWORD: r2d2
+      POSTGRES_DB: r2d2
+      # The projection is rebuildable from the ledger, so durability here is
+      # worth less than write throughput during a replay.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"   # ivfflat index builds want this
+      - "-c"
+      - "max_connections=50"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./r2d2_memory/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U r2d2 -d r2d2"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  nats_data:
+  pg_data:
