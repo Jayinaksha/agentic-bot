@@ -1,0 +1,66 @@
+# robot_localization EKF, climb (tumbling) operation.
+#
+# Loaded by odom_supervisor when climb_fsm enters a stair transition. Two
+# things change and both are forced by physics, not tuning taste:
+#
+#   1. Wheel odometry is dropped entirely. A tumbling cluster has no fixed
+#      contact radius, so /odom_wheel is not merely noisy, it is meaningless.
+#      tristar_controller already flags it invalid; this config makes sure the
+#      filter cannot use it even if a stale message arrives.
+#
+#   2. The laser scan matcher is dropped. A planar scanner pitched 30 degrees
+#      up a staircase is looking at the ceiling and the far wall, and returns
+#      confident, wrong matches - far more damaging than no match at all.
+#
+# That leaves the IMU alone, so this is dead reckoning, and it is expected to
+# drift. The recovery is not a better filter: it is relocalising against the
+# destination floor's map once the platform is level again, which
+# floor_manager triggers on arrival.
+
+ekf_filter_node:
+  ros__parameters:
+    frequency: 50.0
+    sensor_timeout: 0.5
+    two_d_mode: false             # the whole point of this state is leaving the plane
+    transform_time_offset: 0.0
+    transform_timeout: 0.2
+    print_diagnostics: true
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    imu0: /imu/data
+    imu0_config: [false, false, false,
+                  true,  true,  true,
+                  false, false, false,
+                  true,  true,  true,
+                  true,  true,  true]
+    imu0_queue_size: 20
+    imu0_differential: false
+    imu0_relative: false
+    imu0_nodelay: true
+    imu0_remove_gravitational_acceleration: true
+
+    # Deliberately large: this state is known to be drifting and downstream
+    # consumers should see that in the covariance rather than be misled by a
+    # confident pose. Nav2 is suspended during a climb for exactly this reason.
+    process_noise_covariance: [0.5,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+                               0,    0.5,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0.5,  0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0.05, 0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0.05, 0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0.30, 0,    0,    0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0.40, 0,    0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,    0.40, 0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,    0,    0.40, 0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,    0,    0,    0.05, 0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0.05, 0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0.30, 0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0.05, 0,    0,
+                               0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0.05, 0,
+                               0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0.05]

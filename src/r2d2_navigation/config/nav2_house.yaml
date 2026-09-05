@@ -1,0 +1,336 @@
+# Nav2 for one storey of a house, on a small CPU.
+#
+# Two choices drive this whole file:
+#
+#   Controller: Regulated Pure Pursuit, not DWB and not MPPI. RPP costs roughly
+#   an order of magnitude less CPU than MPPI and, on a skid-steer with a round
+#   footprint in tight rooms, tracks the plan at least as well. MPPI is the
+#   better controller on a car-like base in open space; in a corridor 0.9 m wide
+#   the plan does most of the work and the controller only has to follow it.
+#
+#   Planner: Smac 2D (A* over the grid). The platform can turn in place, so it
+#   does not need a kinematically-feasible Hybrid-A* plan, and 2D A* on a 3 cm
+#   grid over a house-sized map replans in a few milliseconds.
+#
+# Everything is sized for a 0.36 x 0.30 m footprint moving at 0.55 m/s.
+
+amcl:
+  ros__parameters:
+    use_sim_time: true
+    robot_model_type: "nav2_amcl::OmniMotionModel"
+    alpha1: 0.25
+    alpha2: 0.25
+    alpha3: 0.25
+    alpha4: 0.25
+    alpha5: 0.15
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    global_frame_id: "map"
+    scan_topic: /scan
+    laser_model_type: "likelihood_field"
+    laser_max_range: 12.0
+    laser_min_range: 0.15
+    max_beams: 90
+    min_particles: 400
+    max_particles: 2500
+    update_min_a: 0.15
+    update_min_d: 0.15
+    resample_interval: 1
+    transform_tolerance: 0.5
+    recovery_alpha_fast: 0.1
+    recovery_alpha_slow: 0.001
+    tf_broadcast: true
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: true
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odometry/filtered
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    navigators: ["navigate_to_pose", "navigate_through_poses"]
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+    navigate_through_poses:
+      plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+
+controller_server:
+  ros__parameters:
+    use_sim_time: true
+    controller_frequency: 20.0
+    min_x_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    progress_checker_plugins: ["progress_checker"]
+    goal_checker_plugins: ["general_goal_checker", "precise_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.4
+      # Generous: the platform legitimately crawls over sills and up slopes.
+      movement_time_allowance: 20.0
+
+    # Ordinary room-to-room navigation. Nav2 alone will not do better than this
+    # on a skid-steer; anything tighter is handed to precise_docking.
+    general_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.20
+      yaw_goal_tolerance: 0.25
+      stateful: true
+
+    # Used when the caller asks for precision and hands off to the docking
+    # servo afterwards. Nav2 gets close, the servo closes the last 20 cm.
+    precise_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.08
+      yaw_goal_tolerance: 0.10
+      stateful: true
+
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.45
+      lookahead_dist: 0.45
+      min_lookahead_dist: 0.25
+      max_lookahead_dist: 0.75
+      lookahead_time: 1.2
+      use_velocity_scaled_lookahead_dist: true
+      transform_tolerance: 0.15
+
+      # Slow down for curvature and near obstacles. In a house both trigger
+      # constantly, which is the intended behaviour: doorways are exactly where
+      # a fast skid-steer clips a frame.
+      use_regulated_linear_velocity_scaling: true
+      regulated_linear_scaling_min_radius: 0.55
+      regulated_linear_scaling_min_speed: 0.12
+      use_cost_regulated_linear_velocity_scaling: true
+      cost_scaling_dist: 0.5
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 3.0
+
+      # The platform can spin in place, so let it: rotating to face the path is
+      # far more reliable through a doorway than arcing into it.
+      use_rotate_to_heading: true
+      rotate_to_heading_min_angle: 0.6
+      rotate_to_heading_angular_vel: 1.0
+      max_angular_accel: 2.5
+
+      allow_reversing: false
+      use_collision_detection: true
+      max_allowed_time_to_collision_up_to_carrot: 1.2
+      min_approach_linear_velocity: 0.05
+      approach_velocity_scaling_dist: 0.6
+
+planner_server:
+  ros__parameters:
+    use_sim_time: true
+    expected_planner_frequency: 2.0
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_smac_planner::SmacPlanner2D"
+      tolerance: 0.15
+      downsample_costmap: false
+      allow_unknown: false          # a house is fully mapped before it is driven;
+                                    # planning through unknown space here means
+                                    # planning through an unmapped staircase
+      max_iterations: 1000000
+      max_planning_time: 2.0
+      cost_travel_multiplier: 2.0   # prefer the middle of a corridor
+      use_final_approach_orientation: false
+
+smoother_server:
+  ros__parameters:
+    use_sim_time: true
+    smoother_plugins: ["simple_smoother"]
+    simple_smoother:
+      plugin: "nav2_smoother::SimpleSmoother"
+      tolerance: 1.0e-10
+      max_its: 1000
+      do_refinement: true
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: true
+      global_frame: map
+      robot_base_frame: base_link
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      resolution: 0.03
+      track_unknown_space: true
+      # Circumscribed radius of the 0.36 x 0.30 footprint, plus a little for the
+      # clusters, which stick out further than the chassis box.
+      robot_radius: 0.26
+      plugins: ["static_layer", "obstacle_layer", "terrain_layer",
+                "keepout_layer", "inflation_layer"]
+
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 1.8
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+          raytrace_max_range: 12.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 8.0
+          obstacle_min_range: 0.0
+
+      # Cliffs and unmountable steps from the ToF beams. Marking only: a ToF
+      # beam sees one point and must never be allowed to clear a hazard another
+      # beam has marked.
+      terrain_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: terrain
+        terrain:
+          topic: /terrain/hazards
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 0.5
+          obstacle_max_range: 1.5
+          obstacle_min_range: 0.0
+
+      # Staircases and balcony edges, drawn by hand into a filter mask. This is
+      # the belt to the ToF braces: a mask does not depend on a sensor seeing
+      # the hazard in time, and the descent side of a flight is exactly where a
+      # forward-looking beam has the least warning.
+      keepout_layer:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: "/costmap_filter_info"
+
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.45
+        cost_scaling_factor: 3.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: true
+      global_frame: odom
+      robot_base_frame: base_link
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      rolling_window: true
+      width: 4
+      height: 4
+      resolution: 0.03
+      robot_radius: 0.26
+      plugins: ["obstacle_layer", "terrain_layer", "inflation_layer"]
+
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 1.8
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+          raytrace_max_range: 8.0
+          obstacle_max_range: 5.0
+
+      terrain_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: terrain
+        terrain:
+          topic: /terrain/hazards
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 0.5
+          obstacle_max_range: 1.5
+
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.35
+        cost_scaling_factor: 3.0
+
+behavior_server:
+  ros__parameters:
+    use_sim_time: true
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: ["spin", "backup", "wait"]
+    spin:
+      plugin: "nav2_behaviors::Spin"
+    backup:
+      plugin: "nav2_behaviors::BackUp"
+    wait:
+      plugin: "nav2_behaviors::Wait"
+    local_frame: odom
+    global_frame: map
+    robot_base_frame: base_link
+    transform_tolerance: 0.15
+    simulate_ahead_time: 2.0
+    max_rotational_vel: 1.2
+    min_rotational_vel: 0.4
+    rotational_acc_lim: 2.5
+
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: true
+    smoothing_frequency: 20.0
+    scale_velocities: false
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.55, 0.0, 1.6]
+    min_velocity: [-0.25, 0.0, -1.6]
+    max_accel: [1.2, 0.0, 2.5]
+    max_decel: [-1.5, 0.0, -2.5]
+    odom_topic: "/odometry/filtered"
+    odom_duration: 0.1
+    # Nav2's output goes to the climb FSM, not straight to the wheels: the FSM
+    # is the only node permitted to publish /cmd_vel.
+    velocity_timeout: 1.0
+
+collision_monitor:
+  ros__parameters:
+    use_sim_time: true
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "cmd_vel_nav"
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: true
+    stop_pub_timeout: 2.0
+    polygons: ["FootprintApproach"]
+    FootprintApproach:
+      type: "polygon"
+      action_type: "approach"
+      footprint_topic: "/local_costmap/published_footprint"
+      time_before_collision: 1.0
+      simulation_time_step: 0.1
+      min_points: 6
+      visualize: false
+      enabled: true
+    observation_sources: ["scan", "terrain"]
+    scan:
+      type: "scan"
+      topic: "/scan"
+      enabled: true
+    terrain:
+      type: "pointcloud"
+      topic: "/terrain/hazards"
+      min_height: 0.0
+      max_height: 0.5
+      enabled: true

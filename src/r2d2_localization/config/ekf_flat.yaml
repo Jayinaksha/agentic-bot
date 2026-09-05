@@ -1,0 +1,100 @@
+# robot_localization EKF, normal (rolling) operation.
+#
+# Frame ownership - the single most common way to break a ROS 2 nav stack is to
+# have two nodes publishing the same transform. In this stack:
+#
+#   map   -> odom        slam_toolbox (mapping) or amcl (localisation)
+#   odom  -> base_link   THIS NODE, and nothing else
+#
+# In particular ros2_laser_scan_matcher must run with publish_tf:=false and
+# feed this filter on a topic, and tristar_controller has publish_tf:=false.
+#
+# Three sources are fused:
+#   /odom_wheel  x,y,yaw velocity from the sub-wheels. Good short-term scale,
+#                poor yaw (skid-steer scrub), invalid during a climb.
+#   /odom_scan   pose from laser scan matching. Excellent yaw and drift-free
+#                over a room, but fails in featureless corridors and on stairs.
+#   /imu/data    yaw rate and attitude. Fast, drifts slowly, immune to slip.
+#
+# The pairing matters: wheels supply scale, the scan matcher supplies heading
+# correction, the IMU covers both while the other two are momentarily useless.
+
+ekf_filter_node:
+  ros__parameters:
+    frequency: 50.0
+    sensor_timeout: 0.2
+    two_d_mode: true              # a house floor is planar; the climb is handled
+                                  # separately by odom_supervisor
+    transform_time_offset: 0.0
+    transform_timeout: 0.1
+    print_diagnostics: true
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom             # this filter is the local, continuous estimate
+
+    # --- wheel odometry -----------------------------------------------------
+    # Velocities only, not pose: integrating the wheel pose here would double
+    # count against the scan matcher and lock in skid-steer scrub error.
+    odom0: /odom_wheel
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, false,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_differential: false
+    odom0_relative: false
+    odom0_nodelay: true
+
+    # --- laser scan matcher -------------------------------------------------
+    # Differential mode: we consume the *change* in matcher pose, so a matcher
+    # jump after relocalisation does not teleport the filter.
+    odom1: /odom_scan
+    odom1_config: [true,  true,  false,
+                   false, false, true,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_queue_size: 10
+    odom1_differential: true
+    odom1_relative: false
+    odom1_nodelay: true
+
+    # --- IMU ----------------------------------------------------------------
+    # Yaw rate only. Absolute yaw from a 6-axis IMU has no magnetometer to
+    # anchor it, so feeding it as an orientation would inject a slow drift the
+    # scan matcher then has to fight.
+    imu0: /imu/data
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 20
+    imu0_differential: false
+    imu0_relative: false
+    imu0_nodelay: true
+    imu0_remove_gravitational_acceleration: true
+
+    # Process noise. Yaw (index 5) is loose because skid-steer yaw genuinely is
+    # uncertain; x/y are tighter since two independent sources constrain them.
+    process_noise_covariance: [0.02, 0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                               0,    0.02, 0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    1e-3, 0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    1e-3, 0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    1e-3, 0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0.08, 0,     0,     0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0.04,  0,     0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,     0.04,  0,    0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     1e-3, 0,    0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,    1e-3, 0,    0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    1e-3, 0,    0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0.15, 0,    0,    0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    1e-3, 0,    0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    1e-3, 0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    1e-3]

@@ -1,0 +1,32 @@
+# ros2_laser_scan_matcher (the package already vendored in this repo).
+#
+# publish_tf is FALSE. This is the change that matters most relative to the
+# original start_mapping.launch.py, where the scan matcher and slam_toolbox
+# both published into the same transform chain. Here the matcher is one input
+# to the EKF, and only the EKF writes odom -> base_link.
+
+laser_scan_matcher:
+  ros__parameters:
+    use_sim_time: true
+    publish_tf: false
+    publish_odom: /odom_scan_raw   # gated by odom_supervisor before reaching the EKF
+
+    base_frame: base_link
+    odom_frame: odom
+    laser_frame: laser
+
+    # PLICP tuning for indoor rooms with a 12 m, 720-point scanner.
+    max_iterations: 12
+    max_correspondence_dist: 0.5
+    max_angular_correction_deg: 25.0
+    max_linear_correction: 0.5
+    epsilon_xy: 0.000001
+    epsilon_theta: 0.000001
+    outliers_maxPerc: 0.92
+    use_corr_tricks: true
+    do_compute_covariance: true
+
+    # Only match after real movement: matching a stationary robot accumulates
+    # noise into the estimate for no information gain.
+    kf_dist_linear: 0.08
+    kf_dist_angular: 0.06

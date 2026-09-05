@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Odometry fusion, floor management and map/AMCL bring-up.
+
+    ros2 launch r2d2_localization localization.launch.py mode:=slam
+    ros2 launch r2d2_localization localization.launch.py mode:=amcl
+
+Transform ownership, which is the thing that most often gets broken:
+
+    map  -> odom        slam_toolbox (mode:=slam) or amcl (mode:=amcl)
+    odom -> base_link   ekf_filter_node, and nothing else
+
+The laser scan matcher runs with publish_tf:=false and feeds the EKF on a
+topic; tristar_controller likewise. That is a deliberate change from the
+original start_mapping.launch.py, where the scan matcher and slam_toolbox both
+wrote into the same chain and quietly fought each other.
+"""
+
+import os
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    share = get_package_share_directory('r2d2_localization')
+    ekf_flat = os.path.join(share, 'config', 'ekf_flat.yaml')
+    scan_matcher_cfg = os.path.join(share, 'config', 'scan_matcher.yaml')
+    slam_cfg = os.path.join(share, 'config', 'slam_toolbox.yaml')
+
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    mode = LaunchConfiguration('mode')
+    map_dir = LaunchConfiguration('map_directory')
+    floor = LaunchConfiguration('floor')
+
+    is_slam = IfCondition(PythonExpression(['"', mode, '" == "slam"']))
+    is_amcl = IfCondition(PythonExpression(['"', mode, '" == "amcl"']))
+
+    sim = {'use_sim_time': use_sim_time}
+
+    return LaunchDescription([
+        DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument(
+            'mode', default_value='slam',
+            description='"slam" builds a map of the current floor; '
+                        '"amcl" localises against a saved one.'),
+        DeclareLaunchArgument('map_directory',
+                              default_value=os.path.expanduser('~/r2d2_maps')),
+        DeclareLaunchArgument('floor', default_value='0'),
+        DeclareLaunchArgument(
+            'use_scan_matcher', default_value='true',
+            description='Feed PLICP scan-match odometry into the EKF. Turn off '
+                        'if your platform has good wheel encoders and you want '
+                        'the CPU back.'),
+
+        # --- odom -> base_link --------------------------------------------
+        Node(
+            package='ros2_laser_scan_matcher',
+            executable='laser_scan_matcher_node',
+            name='laser_scan_matcher',
+            output='screen',
+            parameters=[scan_matcher_cfg, sim],
+            condition=IfCondition(LaunchConfiguration('use_scan_matcher')),
+        ),
+        Node(
+            package='r2d2_localization',
+            executable='odom_supervisor',
+            name='odom_supervisor',
+            output='screen',
+            parameters=[sim],
+        ),
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_filter_node',
+            output='screen',
+            parameters=[ekf_flat, sim],
+        ),
+
+        # --- map -> odom ---------------------------------------------------
+        GroupAction([
+            Node(
+                package='slam_toolbox',
+                executable='async_slam_toolbox_node',
+                name='slam_toolbox',
+                output='screen',
+                parameters=[slam_cfg, sim],
+            ),
+        ], condition=is_slam),
+
+        GroupAction([
+            Node(
+                package='nav2_map_server',
+                executable='map_server',
+                name='map_server',
+                output='screen',
+                parameters=[sim, {
+                    'yaml_filename': PythonExpression(
+                        ['"', map_dir, '/house_f" + str(', floor, ') + ".yaml"']),
+                }],
+            ),
+            Node(
+                package='nav2_amcl',
+                executable='amcl',
+                name='amcl',
+                output='screen',
+                parameters=[sim, {
+                    # A skid-steer scrubs sideways under rotation, which the
+                    # differential motion model does not predict; the omni model
+                    # with a non-zero alpha5 absorbs it.
+                    'robot_model_type': 'nav2_amcl::OmniMotionModel',
+                    'alpha1': 0.25, 'alpha2': 0.25, 'alpha3': 0.25,
+                    'alpha4': 0.25, 'alpha5': 0.15,
+                    'min_particles': 400,
+                    'max_particles': 2500,
+                    'laser_model_type': 'likelihood_field',
+                    'update_min_d': 0.15,
+                    'update_min_a': 0.15,
+                }],
+            ),
+            Node(
+                package='nav2_lifecycle_manager',
+                executable='lifecycle_manager',
+                name='lifecycle_manager_localization',
+                output='screen',
+                parameters=[sim, {
+                    'autostart': True,
+                    'node_names': ['map_server', 'amcl'],
+                }],
+            ),
+        ], condition=is_amcl),
+
+        # --- floors ---------------------------------------------------------
+        Node(
+            package='r2d2_localization',
+            executable='floor_manager',
+            name='floor_manager',
+            output='screen',
+            parameters=[sim, {'map_directory': map_dir}],
+        ),
+    ])

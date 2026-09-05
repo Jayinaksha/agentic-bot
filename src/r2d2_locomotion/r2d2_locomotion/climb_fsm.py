@@ -294,7 +294,7 @@ class ClimbFsm(Node):
             level = pitch < 0.06
             self._level_streak = self._level_streak + 1 if level else 0
             if self._level_streak >= self.exit_cycles and not riser_ahead:
-                self._last_result = f'reached landing after {self._rise:.2f} m rise'
+                self._last_result = f'reached landing after {self._rise:+.2f} m rise'
                 self._requested = False
                 self._level_streak = 0
                 self._enter(State.SETTLE)
@@ -326,7 +326,9 @@ class ClimbFsm(Node):
         now = time.time()
         if now - self._window_start < self.stall_window:
             return False
-        progress = self._rise - self._rise_at_window_start
+        # Magnitude, not signed: descending a flight is negative progress on
+        # this axis but is not a stall.
+        progress = abs(self._rise - self._rise_at_window_start)
         self._rise_at_window_start = self._rise
         self._window_start = now
         return progress < self.stall_eps

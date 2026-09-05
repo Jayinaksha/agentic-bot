@@ -1,0 +1,70 @@
+# slam_toolbox, tuned for one storey of a house with a 12 m 2D scanner.
+#
+# It owns map -> odom only. odom -> base_link comes from the EKF, so
+# use_scan_matching here is a *loop-closure* aid on top of an already-good
+# odometry input, not the primary motion source it becomes when slam_toolbox is
+# fed raw wheel odometry.
+
+slam_toolbox:
+  ros__parameters:
+    use_sim_time: true
+
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: HuberLoss   # rooms are full of legs and clutter that
+                                     # a squared loss would over-weight
+
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    mode: mapping
+
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.02
+    map_update_interval: 1.0
+    resolution: 0.03               # 3 cm: a house needs doorway-level detail
+    max_laser_range: 12.0
+    minimum_time_interval: 0.2
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+
+    # Add a keyframe often: rooms are small and the robot turns constantly, so
+    # sparse keyframes lose the corner geometry that closes loops.
+    minimum_travel_distance: 0.15
+    minimum_travel_heading: 0.15
+    scan_buffer_size: 20
+    scan_buffer_maximum_scan_distance: 12.0
+
+    use_scan_matching: true
+    use_scan_barycenter: true
+    link_match_minimum_response_fine: 0.12
+    link_scan_maximum_distance: 1.5
+
+    do_loop_closing: true
+    loop_search_maximum_distance: 4.0
+    loop_match_minimum_chain_size: 8
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_minimum_response_fine: 0.45
+
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
