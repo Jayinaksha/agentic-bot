@@ -25,7 +25,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.10 is ROS 2 Humble's interpreter, 3.12 is Jazzy's.
+        # 3.12 is ROS 2 Jazzy's interpreter, which this stack targets. 3.10 is
+        # kept because the ROS-free maths modules should stay portable - but
+        # note the Nav2 CONFIG is Jazzy-only (see check_nav2_plugins.py), so a
+        # green 3.10 run here does not imply the stack runs on Humble.
         python: ['3.10', '3.12']
     steps:
       - uses: actions/checkout@v4
@@ -290,6 +293,13 @@ jobs:
       # hard-coded default and the value you tuned is ignored.
       - name: parameters match the nodes they configure
         run: python scripts/check_params.py
+
+      # Nav2 standardised plugin naming on "::" in Jazzy; Humble and Iron use
+      # "/". The names are not aliased, so a wrongly-styled plugin does not warn,
+      # it fails to load. A half-finished migration is worst: some plugins load,
+      # some do not, and the stack limps in a way that looks like bad tuning.
+      - name: Nav2 plugin names are consistently styled
+        run: python scripts/check_nav2_plugins.py
 
       - name: referenced scripts exist
         run: |

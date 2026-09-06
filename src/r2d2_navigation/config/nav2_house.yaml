@@ -1,5 +1,13 @@
 # Nav2 for one storey of a house, on a small CPU.
 #
+# REQUIRES NAV2 JAZZY OR NEWER. Every plugin below is named with "::", which
+# Nav2 standardised on in Jazzy (PR #4220); Humble and Iron use "/" instead.
+# The names are not aliased, so on Humble every single plugin here fails to
+# load and the whole stack comes up dead. To run on Humble, replace "::" with
+# "/" in every `plugin:` value and in robot_model_type - and check the
+# parameter names too, since several were renamed in the same window.
+# scripts/check_nav2_plugins.py enforces that the style stays consistent.
+#
 # Two choices drive this whole file:
 #
 #   Controller: Regulated Pure Pursuit, not DWB and not MPPI. RPP costs roughly

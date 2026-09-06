@@ -486,6 +486,7 @@ compared, or a number computed.
 | A doorway placed off its wall lengthened it | A door mistyped at x=99 produced a 98 m wall across the map instead of a 9 m one, silently | Falsifying the reachability test |
 | MCP server written against SDK 1.x | `pip install mcp` now resolves to 2.x, where `FastMCP` no longer exists — the server would not import at all | Installing the SDK and loading it |
 | `Tool.inputSchema` renamed in SDK 2.0 | All 15 tools advertised to the model as taking **no arguments** — every call arrives empty, with nothing in any log to say why | The same |
+| Nav2 config was Jazzy-only, undocumented | On Humble every plugin fails to load and the stack comes up dead | `check_nav2_plugins.py` |
 
 ### Known warnings, accepted deliberately
 
@@ -505,8 +506,16 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   solver for this reason.
 - **No launch file has been executed.** Node names, remappings and parameter
   plumbing are written carefully but not run.
-- **Nav2 parameters are unvalidated** against your Nav2 version. Plugin names
-  changed between Humble and Jazzy.
+- **Nav2 parameter *values* are unvalidated** against a running Nav2 — the
+  tuning is reasoned, not measured. The plugin *names* have been checked: all 20
+  use the `::` style Nav2 standardised on in Jazzy (PR #4220), verified
+  consistent and enforced in CI by `check_nav2_plugins.py`.
+
+  **This config requires Nav2 Jazzy or newer.** Humble and Iron use `/`, the
+  names are not aliased, and a wrongly-styled plugin does not warn — it fails to
+  load. On Humble every plugin here would fail and the stack would come up dead.
+  To run on Humble, `check_nav2_plugins.py --distro humble` lists everything
+  that needs changing.
 - **No model endpoint has been called.** The prompt and response handling are
   written against Cosmos Reason 2's documented output shape.
 - The MCP server *has* now been loaded against the real SDK: all 15 tools

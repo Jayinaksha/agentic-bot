@@ -15,6 +15,10 @@ further down. Still present and still works; v2 does not delete it.
 
 ## v2 quick start
 
+> **Requires ROS 2 Jazzy or newer.** The Nav2 configuration uses the `::` plugin
+> naming Nav2 standardised on in Jazzy; on Humble every plugin fails to load.
+> `python3 scripts/check_nav2_plugins.py --distro humble` lists what to change.
+
 ```bash
 # 1. build
 cd ~/agentic-bot && colcon build --symlink-install && source install/setup.bash
@@ -100,6 +104,7 @@ Three helper scripts, all of which are worth running before the simulator:
 python3 scripts/analyse_climb.py     # can this platform climb these stairs?
 python3 scripts/check_params.py      # YAML vs nodes, and constant drift
 python3 scripts/check_clearances.py  # does the robot fit through its own doors?
+python3 scripts/check_nav2_plugins.py # plugin names match the target ROS distro
 python3 scripts/check_ci.py          # run the whole CI locally before pushing
 python3 scripts/calibrate_slip.py    # measure yaw_slip_factor (needs ROS)
 python3 scripts/check_memory.py      # ledger + pgvector against real backends
