@@ -162,8 +162,22 @@ def _strip_installs(script: str) -> str:
 
 
 def _missing_module(output: str, deps: Set[str]) -> str:
-    """The dependency a failure is attributable to, if any."""
+    """The dependency a failure is attributable to, if any.
+
+    Two spellings, because Python reports the same condition differently
+    depending on how the module was reached:
+
+        import pyflakes        ModuleNotFoundError: No module named 'pyflakes'
+        python -m pyflakes     /usr/bin/python: No module named pyflakes
+
+    Matching only the quoted form meant every `python -m <tool>` step was
+    reported as a genuine failure on a machine without that tool - which is the
+    crying-wolf behaviour this function exists to prevent, arriving through a
+    different door.
+    """
     match = re.search(r"No module named '([\w.]+)'", output)
+    if not match:
+        match = re.search(r'No module named ([\w.]+)', output)
     if not match:
         return ''
     module = match.group(1).split('.')[0]

@@ -33,7 +33,6 @@ import argparse
 import ast
 import os
 import re
-import sys
 from typing import Dict, List, Set, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -220,7 +219,7 @@ def main() -> int:
                   f'read-only, so --dry-run would execute it')
             problems += 1
         if not leaked:
-            print(f'[ ok ] no acting tool is marked read-only')
+            print('[ ok ] no acting tool is marked read-only')
 
     # --- cross-references between tool descriptions -------------------------
     dangling: List[Tuple[str, str]] = []
@@ -233,7 +232,7 @@ def main() -> int:
               f'"{target}", which does not exist')
         problems += 1
     if not dangling:
-        print(f'[ ok ] tool descriptions cross-reference only real tools')
+        print('[ ok ] tool descriptions cross-reference only real tools')
 
     # --- the CI step's own exemption list -----------------------------------
     if os.path.exists(WORKFLOW):
@@ -249,7 +248,7 @@ def main() -> int:
                       f'behind a stale exemption')
                 problems += 1
             if not unknown:
-                print(f'[ ok ] CI schema exemptions all name real tools')
+                print('[ ok ] CI schema exemptions all name real tools')
 
     print()
     if problems:
