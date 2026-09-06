@@ -427,7 +427,7 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 
 ### Verified here
 
-- **234 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
+- **255 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
 
   | Suite | Tests | Covers |
   |---|---|---|
@@ -436,6 +436,7 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
   | `r2d2_memory` | 28 | Hash-chain tamper detection, merge radius, position fusion, embeddings |
   | `r2d2_perception` | 44 | Pixel→bearing, median ranging, world projection, VLA response parsing |
   | `r2d2_mcp` | 42 | Tool-call parsing, agent loop, failure paths, dry run |
+  | `r2d2_sim` | 21 | Wall-gap splitting, world geometry, and a flood-fill proving every room is actually reachable |
 
 - `scripts/analyse_climb.py` — quasi-static analysis of reach, tread fit, gait
   match, tipping, torque, climb duration and ride height. **This found two real
@@ -482,6 +483,7 @@ compared, or a number computed.
 | 0.20 m of approach clearance | A 0.36 m robot cannot square up to the flight | Same comparison |
 | Contact detector 4× slow | Would have missed its own confirmation window | Tracing the detector by hand |
 | Inflation covered the whole doorway | No zero-cost lane through any door in the house: the controller crawls at every threshold and the planner detours around doors | `check_clearances.py` |
+| A doorway placed off its wall lengthened it | A door mistyped at x=99 produced a 98 m wall across the map instead of a 9 m one, silently | Falsifying the reachability test |
 
 ### Known warnings, accepted deliberately
 
@@ -507,6 +509,21 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   written against Cosmos Reason 2's documented output shape.
 - **The Postgres schema has never been applied**, and the ivfflat `lists=100`
   is a starting guess.
+
+### Falsifying the tests, not just the code
+
+The abandoned simulator taught a habit worth keeping: a check that passes tells
+you nothing until you have watched it fail. Every check added since has been
+falsified deliberately before being trusted — drift injected into each mirrored
+constant, the inflation radius pushed back to a value that should warn, doors
+narrowed below the robot, walls deleted.
+
+That discipline caught a mistake of mine immediately. Sealing the kitchen's
+hallway door did **not** make the reachability test fail, which looked like a
+broken test. It was a broken falsification: the kitchen has two doors, so the
+route through the living room survived. Sealing both fires the assertion
+correctly. The same exercise turned up a real bug in the wall splitter, since a
+gap placed off its wall was extending the wall to reach it.
 
 ### An attempt that was abandoned, and why
 

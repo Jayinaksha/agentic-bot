@@ -44,7 +44,8 @@ jobs:
             src/r2d2_navigation/test \
             src/r2d2_memory/test \
             src/r2d2_perception/test \
-            src/r2d2_mcp/test
+            src/r2d2_mcp/test \
+            src/r2d2_sim/test
 
   design-checks:
     name: design checks

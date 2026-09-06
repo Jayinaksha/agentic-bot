@@ -85,13 +85,13 @@ export R2D2_MEMORY=on
 
 ### Tests and design checks
 
-234 unit tests covering the geometry and control logic, none of which need ROS,
+255 unit tests covering the geometry and control logic, none of which need ROS,
 Gazebo, NATS, Postgres or a model endpoint:
 
 ```bash
 python3 -m pytest src/r2d2_locomotion/test src/r2d2_navigation/test \
                   src/r2d2_memory/test src/r2d2_perception/test \
-                  src/r2d2_mcp/test -q
+                  src/r2d2_mcp/test src/r2d2_sim/test -q
 ```
 
 Three helper scripts, all of which are worth running before the simulator:

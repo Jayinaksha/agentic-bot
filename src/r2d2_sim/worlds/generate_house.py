@@ -138,11 +138,26 @@ def _box(name, x, y, z, sx, sy, sz, yaw=0.0, rgba=(0.85, 0.83, 0.80, 1.0),
 
 
 def _wall_with_gaps(name, axis, fixed, start, end, gaps, z0, height, rgba):
-    """A wall along `axis` from `start` to `end` at `fixed`, minus door gaps."""
+    """A wall along `axis` from `start` to `end` at `fixed`, minus door gaps.
+
+    Gaps are clamped to the wall, and ones lying entirely off it are ignored.
+    Door lists are shared between walls of different extents - the corridor runs
+    the full width of the house, the room divider only spans the rooms - so a
+    gap that misses a given wall is expected rather than an error.
+
+    Without the clamp a gap beyond `end` walked the cursor past the wall and
+    emitted a segment reaching to the gap: a door mistyped at x=99 produced a
+    98.55 m wall shooting across the map instead of a 9 m one. Silent, and
+    baffling to debug in a simulator.
+    """
     segments = []
     cuts = []
     for gap_centre, gap_w in gaps:
-        cuts.append((gap_centre - gap_w / 2.0, gap_centre + gap_w / 2.0))
+        low = gap_centre - gap_w / 2.0
+        high = gap_centre + gap_w / 2.0
+        if high <= start or low >= end:
+            continue
+        cuts.append((max(low, start), min(high, end)))
     cuts.sort()
 
     cursor = start
