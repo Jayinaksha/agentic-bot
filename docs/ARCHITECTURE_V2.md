@@ -76,6 +76,27 @@ cluster has no fixed wheel-to-ground ratio, so `tristar_controller` publishes
 `/odom_wheel` with a covariance of 1e6 and a `valid: false` flag rather than a
 plausible-looking number the EKF would happily fuse.
 
+### Carrier phase hold
+
+A three-spoke carrier has **two** rest positions:
+
+```
+straddling two sub-wheels   axle at r_c·cos(60°) + r_w = 0.1075 m   (stable)
+balanced on one sub-wheel   axle at r_c + r_w         = 0.1650 m   (unstable)
+```
+
+57 mm apart — and the ToF terrain monitor is trying to detect a 35 mm step. So
+holding the carrier at *zero velocity* in rolling mode is not enough: it parks
+wherever it stopped, the chassis rides anywhere in that band, and the robot
+reads phantom stairs on a flat floor.
+
+`carrier_hold_velocity` servos each carrier onto the straddle phase instead,
+wrapping the error to the 120° symmetry period so it never turns more than 60°
+to settle. `axle_height` and `tof_mount_height` are then derived from that
+position rather than chosen.
+
+This was caught by `scripts/analyse_climb.py`, not by inspection.
+
 ---
 
 ## 3. Terrain sensing without a depth camera
@@ -339,19 +360,33 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 
 ### Verified here
 
-- **189 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
+- **205 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
 
   | Suite | Tests | Covers |
   |---|---|---|
-  | `r2d2_locomotion` | 31 | Skid-steer kinematics, mode-dependent joint commands, arc odometry, ToF geometry, climb envelope |
+  | `r2d2_locomotion` | 47 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, arc odometry, ToF geometry, climb envelope |
   | `r2d2_navigation` | 44 | TLS line fitting, doorway detection, docking sign conventions, cross-floor routing |
   | `r2d2_memory` | 28 | Hash-chain tamper detection, merge radius, position fusion, embeddings |
   | `r2d2_perception` | 44 | Pixel→bearing, median ranging, world projection, VLA response parsing |
   | `r2d2_mcp` | 42 | Tool-call parsing, agent loop, failure paths, dry run |
 
-- All Python compiles; all XML/YAML/SDF parses.
-- `generate_house.py` runs and produces a valid 52-model SDF world.
-- Geometry is self-consistent: the generator asserts the climb envelope.
+- `scripts/analyse_climb.py` — quasi-static analysis of reach, tread fit, gait
+  match, tipping, torque, climb duration and ride height. **This found a real
+  bug**: the zero-velocity carrier hold described above. Two warnings stand
+  deliberately (see below).
+- All Python compiles; all XML/YAML/SDF parses; every `setup.py` entry point
+  resolves to a real module; every referenced script exists.
+- Topic-wiring audit confirms `/cmd_vel` and `/locomotion/mode` each have
+  exactly one writer.
+- `generate_house.py` output matches the committed world byte for byte.
+- All of the above runs in CI (`.github/workflows/tests.yml`) on every push.
+
+### Known warnings, accepted deliberately
+
+| Check | Finding | Why it stands |
+|---|---|---|
+| Gait match | One 120° tumble advances 0.199 m against a 0.318 m step pitch (ratio 0.63) | Matching exactly needs `cluster_circumradius` = 0.183 m, which costs 60% more peak torque and a much taller robot. The climb works, it is just lumpy; `climb_timeout` is wide enough |
+| Torque | Peak 4.7 N·m per cluster when two clusters carry the lift | A real BOM constraint, now recorded as `min_cluster_torque` in `robot_params.yaml`. A typical hobby gearmotor (2–4 N·m) will stall on the first riser |
 
 ### NOT verified
 
@@ -373,15 +408,21 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
 
 ### Suggested bring-up order
 
+0. `python3 scripts/analyse_climb.py` — does the geometry still close? Run this
+   first after changing any dimension; it is seconds, and it catches things a
+   simulator will only show you as an unexplained failure to climb.
 1. `ros2 launch r2d2_description display.launch.py` — is the robot the right
    shape?
 2. `ros2 launch r2d2_sim sim.launch.py` — does it spawn and settle on its
    clusters?
-3. Teleop on flat ground — does `/cmd_vel` drive it sensibly? Calibrate
-   `yaw_slip_factor`.
+3. Teleop on flat ground — does `/cmd_vel` drive it sensibly? Then
+   `python3 scripts/calibrate_slip.py` to measure `yaw_slip_factor` rather than
+   trusting the 1.25 estimate. Check the chassis holds a steady 0.1075 m: if it
+   bobs, the carrier hold is not working and the ToF thresholds are void.
 4. Drive at the staircase in tumbling mode — **this is where the tuning is**.
 5. `slam.launch.py floor:=0`, save, repeat for floor 1.
 6. `house_stack.launch.py mode:=amcl` — Nav2 on one floor.
-7. `docker compose up -d`, apply the schema, start perception.
+7. `docker compose up -d`, then `python3 scripts/check_memory.py` to verify the
+   ledger and pgvector store against real backends before wiring perception in.
 8. `python3 -m r2d2_mcp.agent --dry-run "go to the kitchen"` — check the tool
    loop before letting it move anything.

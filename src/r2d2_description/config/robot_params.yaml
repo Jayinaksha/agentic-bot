@@ -27,7 +27,17 @@ platform:
   cluster_mass: 0.45             # kg, per cluster assembly
   track_width: 0.340             # m, left cluster axle <-> right cluster axle
   wheelbase: 0.260               # m, front cluster axle <-> rear cluster axle
-  axle_height: 0.120             # m, cluster axle above ground when settled
+  # Set by geometry, not chosen: a three-spoke carrier straddling two
+  # sub-wheels puts its axle at cluster_circumradius*cos(60 deg) + sub_wheel_radius.
+  # The other rest position (balanced on one sub-wheel, 0.165 m) is higher and
+  # unstable. tristar_controller parks the carriers at the straddle phase, which
+  # is what keeps this number true while driving - see scripts/analyse_climb.py.
+  axle_height: 0.1075            # m, cluster axle above ground when settled
+  # Whether the drive controller servos each carrier onto the straddle phase in
+  # rolling mode. Without it the chassis rides anywhere in a 57 mm band and the
+  # ToF terrain thresholds are meaningless. Implemented by
+  # r2d2_locomotion/kinematics.py:carrier_hold_velocity.
+  carrier_phase_hold: true
 
   # --- passive anti-tip tail ---
   # Tri-wheel platforms pitch backwards hard at the moment the front clusters
@@ -37,6 +47,11 @@ platform:
   tail_rest_pitch: -0.35         # rad, droop when unloaded
 
   # --- actuation limits ---
+  # Torque, from scripts/analyse_climb.py: ~1.1 N.m per cluster in steady climb,
+  # but up to 4.7 N.m at the moment two clusters carry the lift over a nosing.
+  # Size the drive for the PEAK. A typical hobby gearmotor tops out at 2-4 N.m
+  # and will stall on the first riser.
+  min_cluster_torque: 5.0        # N.m, per cluster, required at the gearbox
   max_wheel_rate: 12.0           # rad/s, sub-wheel velocity (rolling mode)
   max_cluster_rate: 3.5          # rad/s, cluster velocity (tumbling mode)
   max_linear_vel: 0.55           # m/s on flat ground
@@ -52,6 +67,14 @@ stairs:
   width: 0.900                   # m
   steps: 12                      # 12 x 0.15 = 1.80 m floor-to-floor
   # climb margin = (0.165 - 0.150) / 0.150 = 10 %
+  #
+  # Gait note: one 120 deg carrier rotation advances r_cluster*sqrt(3) = 0.199 m
+  # against a 0.318 m step pitch, so the cluster does NOT walk exactly one step
+  # per rotation. Sub-wheels land at varying points along each tread and the
+  # climb is lumpier and slower than the ideal. Matching exactly would need
+  # r_cluster = 0.183 m, which costs 60 % more peak torque and a much taller
+  # robot - a bad trade for a lumpy-but-working climb. climb_timeout is set
+  # wide enough to absorb it.
 
 # Safety envelope enforced by r2d2_locomotion/terrain_monitor.
 limits:

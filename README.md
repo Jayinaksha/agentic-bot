@@ -83,9 +83,9 @@ export R2D2_PG_DSN=postgresql://r2d2:r2d2@127.0.0.1:5432/r2d2
 export R2D2_MEMORY=on
 ```
 
-### Tests
+### Tests and design checks
 
-189 unit tests covering the geometry and control logic, none of which need ROS,
+205 unit tests covering the geometry and control logic, none of which need ROS,
 Gazebo, NATS, Postgres or a model endpoint:
 
 ```bash
@@ -93,6 +93,20 @@ python3 -m pytest src/r2d2_locomotion/test src/r2d2_navigation/test \
                   src/r2d2_memory/test src/r2d2_perception/test \
                   src/r2d2_mcp/test -q
 ```
+
+Three helper scripts, all of which are worth running before the simulator:
+
+```bash
+python3 scripts/analyse_climb.py     # can this platform climb these stairs?
+python3 scripts/calibrate_slip.py    # measure yaw_slip_factor (needs ROS)
+python3 scripts/check_memory.py      # ledger + pgvector against real backends
+```
+
+`analyse_climb.py` settles reach, tread fit, gait match, tipping, torque and
+ride height on paper, on the same `robot_params.yaml` the URDF and world
+generator read. It already caught one shipped bug — a zero-velocity carrier hold
+that let the chassis ride anywhere in a 57 mm band, well past the 35 mm step the
+terrain monitor is looking for. Tests and checks both run in CI on every push.
 
 > **The v2 stack has not been run on hardware or in simulation.** The maths and
 > control logic are unit-tested; the ROS graph, Gazebo physics and Nav2

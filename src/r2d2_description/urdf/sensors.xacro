@@ -146,10 +146,15 @@
     <!-- Four ToF beams. Front pair looks ahead-down for risers and stair edges;
          rear pair guards reversing and descent. -->
     <!-- Mounted at the top of the end faces and tilted 30 deg below horizontal.
-         With the chassis top 0.18 m above ground that puts the ground spot
-         0.31 m ahead of the sensor, which is roughly one cluster-diameter of
-         lookahead: far enough to react, near enough that the beam still lands
-         on the floor rather than on a distant wall. -->
+         The chassis top sits axle_height + body_height/2 = 0.1075 + 0.060 =
+         0.1675 m above ground, so the beam meets level ground 0.29 m ahead of
+         the sensor: far enough to react, near enough that it still lands on
+         the floor rather than on a distant wall.
+
+         This height is only constant because tristar_controller parks the
+         carriers at the straddle phase in rolling mode. A free carrier rides
+         anywhere in a 57 mm band, which is larger than the step the terrain
+         monitor is looking for. See scripts/analyse_climb.py. -->
     <xacro:tof_sensor name="tof_fl" parent="${parent}"
                       x="${body_l/2}" y="${body_w/2 - 0.03}" z="${body_h/2}"
                       yaw="0" tilt="0.5236" max_range="1.5"/>

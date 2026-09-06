@@ -1,0 +1,199 @@
+# Unit tests and design checks for the v2 stack.
+#
+# Deliberately does NOT install ROS 2 or Gazebo. Everything here runs on a plain
+# Python interpreter in seconds, which is the whole reason the geometry and
+# control maths were kept in ROS-free modules: the logic that decides whether the
+# robot climbs or falls down the stairs gets checked on every push, without
+# waiting twenty minutes for a container that still could not run Gazebo
+# headless in a useful way.
+#
+# Simulation and hardware bring-up stay manual - see
+# docs/ARCHITECTURE_V2.md#suggested-bring-up-order.
+
+name: tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: unit tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is ROS 2 Humble's interpreter, 3.12 is Jazzy's.
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: install test dependencies
+        run: python -m pip install --upgrade pip pytest pyyaml
+
+      - name: run unit tests
+        run: |
+          python -m pytest -q \
+            src/r2d2_locomotion/test \
+            src/r2d2_navigation/test \
+            src/r2d2_memory/test \
+            src/r2d2_perception/test \
+            src/r2d2_mcp/test
+
+  design-checks:
+    name: design checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install --upgrade pip pyyaml
+
+      # Fails the build if the platform can no longer climb the staircase it is
+      # specified against - reach, tread fit, tipping, torque, ride height.
+      - name: tri-star climb envelope
+        run: python scripts/analyse_climb.py
+
+      # The world generator refuses to emit stairs the robot cannot mount, so
+      # this also proves robot and test world are still in step.
+      - name: regenerate the house world
+        run: |
+          python src/r2d2_sim/worlds/generate_house.py --out /tmp/house.sdf
+          python - <<'EOF'
+          import xml.dom.minidom as minidom
+          doc = minidom.parse('/tmp/house.sdf')
+          models = doc.getElementsByTagName('model')
+          assert len(models) > 40, f'only {len(models)} models in the world'
+          print(f'world parses: {len(models)} models')
+          EOF
+
+      - name: committed world matches the generator
+        run: |
+          python src/r2d2_sim/worlds/generate_house.py --out /tmp/regen.sdf
+          if ! diff -q src/r2d2_sim/worlds/house_two_floor.sdf /tmp/regen.sdf; then
+            echo "::error::house_two_floor.sdf is stale."
+            echo "Regenerate it: python3 src/r2d2_sim/worlds/generate_house.py"
+            diff -u src/r2d2_sim/worlds/house_two_floor.sdf /tmp/regen.sdf | head -40
+            exit 1
+          fi
+          echo "committed world is up to date"
+
+  static:
+    name: parse and wiring checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install --upgrade pip pyyaml
+
+      - name: every v2 file parses
+        run: |
+          python - <<'EOF'
+          import glob, sys, xml.dom.minidom as minidom, yaml, py_compile
+
+          failures = []
+          for pattern in ('src/r2d2_*/**/*.xml', 'src/r2d2_*/**/*.xacro',
+                          'src/r2d2_*/**/*.sdf'):
+              for path in glob.glob(pattern, recursive=True):
+                  try:
+                      minidom.parse(path)
+                  except Exception as exc:
+                      failures.append((path, exc))
+
+          for pattern in ('src/r2d2_*/**/*.yaml', 'src/r2d2_*/**/*.yml'):
+              for path in glob.glob(pattern, recursive=True):
+                  try:
+                      yaml.safe_load(open(path))
+                  except Exception as exc:
+                      failures.append((path, exc))
+
+          for pattern in ('src/r2d2_*/**/*.py', 'scripts/*.py'):
+              for path in glob.glob(pattern, recursive=True):
+                  try:
+                      py_compile.compile(path, doraise=True)
+                  except Exception as exc:
+                      failures.append((path, exc))
+
+          for path, exc in failures:
+              print(f'::error file={path}::{exc}')
+          sys.exit(1 if failures else 0)
+          EOF
+
+      - name: setup.py entry points resolve
+        run: |
+          python - <<'EOF'
+          import glob, os, re, sys
+          missing = []
+          for setup in glob.glob('src/r2d2_*/setup.py'):
+              package = os.path.dirname(setup)
+              for line in open(setup):
+                  match = re.search(r"'\w+ = ([\w.]+):main'", line)
+                  if match:
+                      module = match.group(1).replace('.', '/') + '.py'
+                      if not os.path.exists(os.path.join(package, module)):
+                          missing.append((setup, match.group(1)))
+          for setup, module in missing:
+              print(f'::error file={setup}::entry point {module} has no module')
+          sys.exit(1 if missing else 0)
+          EOF
+
+      # Two writers on one command topic is the failure mode that silently
+      # breaks a ROS stack, and it is exactly what a launch file will not tell
+      # you. The climb FSM must be the sole authority over the wheels, or
+      # something can take the platform away from it mid-staircase.
+      - name: single writer on the safety-critical topics
+        run: |
+          python - <<'EOF'
+          import collections, glob, re, sys
+
+          publishers = collections.defaultdict(set)
+          for path in glob.glob('src/r2d2_*/r2d2_*/*.py'):
+              node = path.split('/')[-1][:-3]
+              for match in re.finditer(r"create_publisher\(\s*\w+,\s*'([^']+)'",
+                                       open(path).read()):
+                  publishers[match.group(1)].add(node)
+
+          ok = True
+          for topic in ('/cmd_vel', '/locomotion/mode'):
+              writers = sorted(publishers.get(topic, []))
+              if writers != ['climb_fsm']:
+                  print(f'::error::{topic} must be written only by climb_fsm, '
+                        f'found {writers or "no writers"}')
+                  ok = False
+              else:
+                  print(f'{topic}: single writer (climb_fsm)')
+          sys.exit(0 if ok else 1)
+          EOF
+
+      - name: referenced scripts exist
+        run: |
+          python - <<'EOF'
+          import glob, os, re, sys
+          referenced = set()
+          for pattern in ('src/**/*.py', 'src/**/*.yaml', 'docs/*.md'):
+              for path in glob.glob(pattern, recursive=True):
+                  try:
+                      text = open(path, encoding='utf-8').read()
+                  except (UnicodeDecodeError, OSError):
+                      continue
+                  referenced.update(re.findall(r'scripts/[a-z_]+\.py', text))
+          missing = sorted(s for s in referenced if not os.path.exists(s))
+          for script in missing:
+              print(f'::error::{script} is referenced but does not exist')
+          print(f'{len(referenced) - len(missing)}/{len(referenced)} referenced '
+                f'scripts exist')
+          sys.exit(1 if missing else 0)
+          EOF

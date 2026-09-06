@@ -13,6 +13,15 @@ from typing import Dict, List, Optional, Tuple
 # Command vector layout, matching r2d2_locomotion/config/controllers.yaml.
 CLUSTERS: Tuple[str, ...] = ('front_left', 'front_right', 'rear_left', 'rear_right')
 LEFT_CLUSTERS = frozenset({'front_left', 'rear_left'})
+
+# Per-cluster phase offsets baked into the URDF, mirrored here so the carrier
+# hold can compute the right rest angle. Keep in step with r2d2_tristar.urdf.xacro.
+URDF_PHASES = {
+    'front_left': 0.0,
+    'front_right': math.pi / 3.0,
+    'rear_left': math.pi / 3.0,
+    'rear_right': 0.0,
+}
 JOINTS_PER_CLUSTER = 4  # carrier, wheel0, wheel1, wheel2
 
 MODE_ROLLING = 'rolling'
@@ -57,14 +66,68 @@ def body_twist(v_left: float, v_right: float, track: float,
     return v, w
 
 
+# A three-spoke carrier has two rest positions: balanced on one sub-wheel, or
+# straddling two. Straddling puts the axle at r_cluster*cos(60 deg) + r_sub and
+# the other at r_cluster + r_sub - for this platform, 0.108 m against 0.165 m.
+# The carrier must therefore be held at a defined PHASE in rolling mode, not
+# merely commanded to zero velocity: a velocity hold parks it wherever it
+# happened to stop, and the resulting 57 mm of ride-height variation is larger
+# than the 35 mm step the ToF terrain monitor is trying to detect. The robot
+# would see phantom stairs on a flat floor.
+#
+# Straddling is the phase we want: lower centre of mass, and stable rather than
+# balanced on a knife edge.
+CARRIER_PERIOD = 2.0 * math.pi / 3.0     # three-fold symmetry
+STRADDLE_PHASE = -math.pi / 6.0          # sub-wheels at -30 and 210 deg
+
+
+def carrier_rest_phase(urdf_phase: float) -> float:
+    """Carrier joint angle that leaves two sub-wheels straddling the ground.
+
+    The URDF bakes a per-cluster phase offset into the sub-wheel origins (left
+    and right sides run 60 deg apart so a synchronous tumble never lifts both
+    sides at once), so the joint angle needed to reach the straddle position
+    differs per cluster.
+    """
+    return wrap_to_period(STRADDLE_PHASE - urdf_phase, CARRIER_PERIOD)
+
+
+def wrap_to_period(angle: float, period: float) -> float:
+    """Wrap into (-period/2, period/2]."""
+    wrapped = math.fmod(angle, period)
+    if wrapped > period / 2.0:
+        wrapped -= period
+    elif wrapped <= -period / 2.0:
+        wrapped += period
+    return wrapped
+
+
+def carrier_hold_velocity(position: float, rest_phase: float,
+                          gain: float = 6.0, max_rate: float = 2.0) -> float:
+    """Velocity that servos a carrier onto its nearest rest phase.
+
+    Nearest matters: with three-fold symmetry every phase has an equivalent
+    120 deg away, so the error is wrapped to that period and the carrier never
+    turns more than 60 deg to settle. Without the wrap it could take the long
+    way round and lift the chassis on the way.
+    """
+    error = wrap_to_period(rest_phase - position, CARRIER_PERIOD)
+    return clamp(gain * error, max_rate)
+
+
 def joint_commands(v_left: float, v_right: float, mode: str,
                    r_sub: float, r_cluster: float,
-                   max_wheel: float, max_cluster: float) -> List[float]:
+                   max_wheel: float, max_cluster: float,
+                   carrier_positions: Optional[Dict[str, float]] = None,
+                   urdf_phases: Optional[Dict[str, float]] = None,
+                   hold_gain: float = 6.0) -> List[float]:
     """Expand two side speeds into the 16-element joint velocity vector.
 
-    ROLLING  drives the sub-wheels, holds the carriers.
+    ROLLING  drives the sub-wheels; carriers are servoed onto their straddle
+             phase when their positions are known, and held at zero otherwise.
     TUMBLING drives the carriers, holds the sub-wheels.
-    STOPPED  holds everything.
+    STOPPED  holds the wheels, but still parks the carriers, so the robot comes
+             to rest at a known ride height.
     """
     if mode not in MODES:
         raise ValueError(f'unknown transmission mode: {mode!r}')
@@ -72,12 +135,18 @@ def joint_commands(v_left: float, v_right: float, mode: str,
     out: List[float] = []
     for cluster in CLUSTERS:
         v_side = v_left if cluster in LEFT_CLUSTERS else v_right
+
         if mode == MODE_TUMBLING:
             carrier, wheel = clamp(v_side / r_cluster, max_cluster), 0.0
-        elif mode == MODE_ROLLING:
-            carrier, wheel = 0.0, clamp(v_side / r_sub, max_wheel)
         else:
-            carrier, wheel = 0.0, 0.0
+            wheel = clamp(v_side / r_sub, max_wheel) if mode == MODE_ROLLING else 0.0
+            carrier = 0.0
+            if carrier_positions and cluster in carrier_positions:
+                phase = (urdf_phases or {}).get(cluster, 0.0)
+                carrier = carrier_hold_velocity(
+                    carrier_positions[cluster], carrier_rest_phase(phase),
+                    gain=hold_gain, max_rate=max_cluster)
+
         out.extend([carrier, wheel, wheel, wheel])
     return out
 

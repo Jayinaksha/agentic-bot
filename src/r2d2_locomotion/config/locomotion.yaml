@@ -9,6 +9,12 @@ tristar_controller:
     track_width: 0.340
     wheelbase: 0.260
 
+    # P gain servoing each carrier onto its straddle phase in rolling mode.
+    # Without this the carriers park wherever they stopped and the chassis rides
+    # anywhere between 0.108 and 0.165 m, which the ToF thresholds read as
+    # phantom steps. See scripts/analyse_climb.py, check "ride height".
+    carrier_hold_gain: 6.0
+
     # Skid-steer slip factor. A 4-cluster skid-steer does not turn at the ideal
     # differential rate: the lateral scrub of the non-steered clusters eats part
     # of the commanded yaw. 1.0 is the ideal model; measured values for this
@@ -30,7 +36,9 @@ terrain_monitor:
     rate: 20.0                    # Hz
 
     # ToF geometry, needed to turn a raw range into a height difference.
-    tof_mount_height: 0.180       # m above ground when level (chassis top)
+    tof_mount_height: 0.1675      # m above ground when level: axle_height
+                                  # (0.1075) + body_height/2 (0.060). Follows
+                                  # the carrier straddle rest position.
     tof_tilt: 0.5236              # rad below horizontal (30 deg)
     tof_forward_offset: 0.180     # m ahead of base_link
 

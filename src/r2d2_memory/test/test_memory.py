@@ -5,7 +5,7 @@
 
 No NATS and no Postgres needed: the chain logic runs against NullLedger and the
 fusion maths is pure. The parts that genuinely need a database are exercised by
-the integration script in scripts/, not here.
+scripts/check_memory.py, not here.
 """
 
 import asyncio

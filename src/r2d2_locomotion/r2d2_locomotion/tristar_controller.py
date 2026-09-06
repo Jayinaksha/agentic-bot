@@ -43,7 +43,7 @@ from std_msgs.msg import Float64MultiArray, String, Bool
 
 from r2d2_locomotion.kinematics import (CLUSTERS, LEFT_CLUSTERS, MODE_ROLLING,
                                         MODE_STOPPED, MODE_TUMBLING, MODES,
-                                        body_twist, integrate_arc,
+                                        URDF_PHASES, body_twist, integrate_arc,
                                         joint_commands, rate_limit, side_speeds)
 
 
@@ -64,6 +64,7 @@ class TristarController(Node):
             ('cmd_timeout', 0.5),
             ('max_lin_accel_roll', 1.2),
             ('max_lin_accel_climb', 0.35),
+            ('carrier_hold_gain', 6.0),
             ('publish_tf', False),
             ('odom_frame', 'odom_wheel'),
             ('base_frame', 'base_link'),
@@ -79,6 +80,7 @@ class TristarController(Node):
         self.cmd_timeout = g('cmd_timeout').value
         self.acc_roll = g('max_lin_accel_roll').value
         self.acc_climb = g('max_lin_accel_climb').value
+        self.hold_gain = g('carrier_hold_gain').value
         self.odom_frame = g('odom_frame').value
         self.base_frame = g('base_frame').value
 
@@ -97,6 +99,9 @@ class TristarController(Node):
         self._yaw = 0.0
         self._last_positions = None
         self._last_odom_time = None
+        # Live carrier angles, needed to park the clusters at a known ride
+        # height in rolling mode rather than wherever they last stopped.
+        self._carrier_positions = {}
 
         sensor_qos = QoSProfile(depth=10,
                                 reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -140,7 +145,10 @@ class TristarController(Node):
     def _build_command(self, v_left: float, v_right: float) -> List[float]:
         return joint_commands(v_left, v_right, self.mode,
                               self.r_sub, self.r_clu,
-                              self.max_wheel, self.max_cluster)
+                              self.max_wheel, self.max_cluster,
+                              carrier_positions=self._carrier_positions,
+                              urdf_phases=URDF_PHASES,
+                              hold_gain=self.hold_gain)
 
     # ---------------------------------------------------------------- odometry
 
@@ -154,6 +162,11 @@ class TristarController(Node):
         """
         now = self.get_clock().now()
         name_to_pos = dict(zip(msg.name, msg.position))
+
+        for cluster in CLUSTERS:
+            joint = f'{cluster}_carrier_joint'
+            if joint in name_to_pos:
+                self._carrier_positions[cluster] = name_to_pos[joint]
 
         if self.mode != MODE_ROLLING:
             self._last_positions = None
