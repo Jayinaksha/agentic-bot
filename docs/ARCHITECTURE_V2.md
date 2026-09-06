@@ -464,6 +464,12 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
   against realistic path-following pose error, whether a zero-cost lane survives
   the costmap inflation, and hallway turning circle. It found that a 0.45 m
   inflation radius met in the middle of every 0.90 m doorway.
+- `scripts/check_launch.py` — follows every `Node(package=, executable=)`, share
+  directory lookup and xacro `$(find)` to confirm the target exists **and is
+  installed**. A file present in `src/` but never globbed into `data_files` is
+  absent after `colcon build`, and only this distinction catches it.
+- `scripts/check_nav2_plugins.py` — plugin naming style against the target distro.
+- `scripts/check_sql.py` — the memory layer's queries against its own schema.
 - `scripts/check_ci.py` — runs the whole workflow locally, so a broken CI step
   is found before a push rather than after one.
 - All of the above runs in CI (`.github/workflows/tests.yml`) on every push,
@@ -529,8 +535,12 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   register and convert to chat-API definitions with their schemas intact, and
   CI re-checks that on every push. What has not been exercised is a live tool
   call, which needs the ROS bridge underneath it.
-- **The Postgres schema has never been applied**, and the ivfflat `lists=100`
-  is a starting guess.
+- **The Postgres schema has never been applied to a live database**, and the
+  ivfflat `lists=100` is a starting guess. It has, however, been parsed with
+  `pglast` — the real PostgreSQL grammar rather than a regex approximation — and
+  all 14 hand-written queries in `store.py` are checked to parse and to
+  reference only columns the schema defines (`check_sql.py`, in CI). What that
+  cannot tell you is whether the *indexes* are the right ones, which needs data.
 
 ### Falsifying the tests, not just the code
 

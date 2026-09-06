@@ -303,6 +303,15 @@ jobs:
       # executable name: the launch file asked for laser_scan_matcher_node while
       # the CMakeLists installs laser_scan_matcher, and only building it would
       # have shown that.
+      # The memory layer's queries are written by hand against ~60 columns. A
+      # misspelled one fails on the first query that touches it, in a robot that
+      # has been driving happily for ten minutes. pglast is the real PostgreSQL
+      # grammar, so this needs no database.
+      - name: SQL matches the schema it queries
+        run: |
+          python -m pip install --quiet pglast
+          python scripts/check_sql.py
+
       - name: launch and xacro references resolve after install
         run: python scripts/check_launch.py
 
