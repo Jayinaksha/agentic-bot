@@ -449,9 +449,15 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 - Topic-wiring audit confirms `/cmd_vel` and `/locomotion/mode` each have
   exactly one writer.
 - `generate_house.py` output matches the committed world byte for byte.
-- `scripts/check_params.py` — cross-checks every node's `declare_parameters`
-  against the YAML section that configures it, in both directions. A misspelled
-  ROS 2 parameter fails silently, so this is the only place it can be caught.
+- `scripts/check_params.py` — three checks in one. It cross-checks every node's
+  `declare_parameters` against the YAML section that configures it, in both
+  directions (a misspelled ROS 2 parameter fails silently, so this is the only
+  place it can be caught); it compares the 12 constants that are necessarily
+  duplicated between `robot_params.yaml` and the node parameter files; and it
+  verifies that derived values still follow from the platform —
+  `tof_mount_height` from the axle height, `tof_spot_ahead` from the mount
+  geometry, `axle_height` from the carrier straddle position. Two of the bugs
+  below were duplicated constants drifting apart, so this is now enforced.
 - `scripts/check_ci.py` — runs the whole workflow locally, so a broken CI step
   is found before a push rather than after one.
 - All of the above runs in CI (`.github/workflows/tests.yml`) on every push,

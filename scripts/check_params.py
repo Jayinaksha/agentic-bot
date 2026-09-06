@@ -23,6 +23,13 @@ section named for that node, and reports both directions:
 
 It also checks that each YAML section actually corresponds to a node, since a
 section named for a node that does not exist is config that will never load.
+
+Finally it checks MIRRORED constants. Several physical dimensions have to appear
+in more than one file - robot_params.yaml is the design source of truth, but a
+running node reads its own parameter file, and the URDF is built from a third.
+Nothing at runtime notices when those copies disagree; the robot simply behaves
+as though it has a geometry it does not have. Two bugs in this repo came from
+exactly that, so the copies are now declared here and compared.
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ from __future__ import annotations
 import argparse
 import ast
 import glob
+import math
 import os
 import re
 import sys
@@ -116,6 +124,127 @@ def yaml_sections(path: str) -> Dict[str, Set[str]]:
     return out
 
 
+# --------------------------------------------------------------------------
+# Mirrored constants.
+#
+# (label, source path in robot_params.yaml, [copies elsewhere]).
+# A copy is (config file, section, key). Everything is compared exactly, since
+# these are declared numbers rather than computed ones.
+# --------------------------------------------------------------------------
+LOCOMOTION = 'src/r2d2_locomotion/config/locomotion.yaml'
+
+MIRRORS = [
+    ('sub_wheel_radius', ('platform', 'sub_wheel_radius'),
+     [(LOCOMOTION, 'tristar_controller', 'sub_wheel_radius')]),
+    ('cluster_circumradius', ('platform', 'cluster_circumradius'),
+     [(LOCOMOTION, 'tristar_controller', 'cluster_circumradius')]),
+    ('track_width', ('platform', 'track_width'),
+     [(LOCOMOTION, 'tristar_controller', 'track_width')]),
+    ('wheelbase', ('platform', 'wheelbase'),
+     [(LOCOMOTION, 'tristar_controller', 'wheelbase'),
+      (LOCOMOTION, 'climb_fsm', 'wheelbase')]),
+    ('max_wheel_rate', ('platform', 'max_wheel_rate'),
+     [(LOCOMOTION, 'tristar_controller', 'max_wheel_rate')]),
+    ('max_cluster_rate', ('platform', 'max_cluster_rate'),
+     [(LOCOMOTION, 'tristar_controller', 'max_cluster_rate')]),
+    ('step_up_min', ('limits', 'step_up_min'),
+     [(LOCOMOTION, 'terrain_monitor', 'step_up_min')]),
+    ('cliff_drop', ('limits', 'cliff_drop'),
+     [(LOCOMOTION, 'terrain_monitor', 'cliff_drop')]),
+    ('max_pitch_flat', ('limits', 'max_pitch_flat'),
+     [(LOCOMOTION, 'terrain_monitor', 'max_pitch_flat')]),
+    ('max_pitch_climb', ('limits', 'max_pitch_climb'),
+     [(LOCOMOTION, 'terrain_monitor', 'max_pitch_climb')]),
+    ('max_roll', ('limits', 'max_roll'),
+     [(LOCOMOTION, 'terrain_monitor', 'max_roll')]),
+]
+
+
+def _read(path: str):
+    with open(os.path.join(ROOT, path)) as fh:
+        return yaml.safe_load(fh)
+
+
+def _param(config, section: str, key: str):
+    body = config.get(section, {})
+    params = body.get('ros__parameters', {}) if isinstance(body, dict) else {}
+    return params.get(key, KeyError)
+
+
+def check_mirrors() -> int:
+    """Compare duplicated constants against robot_params.yaml."""
+    problems = 0
+    platform = _read('src/r2d2_description/config/robot_params.yaml')
+    cache = {}
+
+    print('mirrored constants')
+    for label, (group, key), copies in MIRRORS:
+        source = platform.get(group, {}).get(key)
+        if source is None:
+            print(f'[FAIL] robot_params.yaml has no {group}.{key}')
+            problems += 1
+            continue
+        for path, section, target_key in copies:
+            if path not in cache:
+                cache[path] = _read(path)
+            value = _param(cache[path], section, target_key)
+            if value is KeyError:
+                print(f'[FAIL] {path} {section}.{target_key} is missing; '
+                      f'robot_params.yaml sets {label} = {source}')
+                problems += 1
+            elif value != source:
+                print(f'[FAIL] {label} disagrees: robot_params.yaml says '
+                      f'{source}, {path} {section}.{target_key} says {value}. '
+                      f'Nothing at runtime notices, and the robot behaves as '
+                      f'though it has a geometry it does not have.')
+                problems += 1
+    if not problems:
+        total = sum(len(copies) for _, _, copies in MIRRORS)
+        print(f'[ ok ] {total} copies of {len(MIRRORS)} constants all agree '
+              f'with robot_params.yaml')
+
+    # Derived values: these must FOLLOW from the platform, not be chosen.
+    print('\nderived constants')
+    p = platform['platform']
+    locomotion = cache.get(LOCOMOTION) or _read(LOCOMOTION)
+    monitor = locomotion['terrain_monitor']['ros__parameters']
+    fsm = locomotion['climb_fsm']['ros__parameters']
+
+    expected_height = p['axle_height'] + p['body_height'] / 2.0
+    if abs(monitor['tof_mount_height'] - expected_height) > 1e-6:
+        print(f'[FAIL] tof_mount_height is {monitor["tof_mount_height"]} but '
+              f'axle_height + body_height/2 = {expected_height:.4f}. The ToF '
+              f'thresholds are calibrated against a ride height the robot does '
+              f'not have.')
+        problems += 1
+    else:
+        print(f'[ ok ] tof_mount_height {expected_height:.4f} m follows from '
+              f'axle_height + body_height/2')
+
+    expected_spot = monitor['tof_mount_height'] / math.tan(monitor['tof_tilt'])
+    if abs(fsm['tof_spot_ahead'] - expected_spot) > 0.005:
+        print(f'[FAIL] climb_fsm.tof_spot_ahead is {fsm["tof_spot_ahead"]} but '
+              f'the mounting geometry gives {expected_spot:.4f}. The descent '
+              f'creep distance is computed from this, so the robot would '
+              f'commit to a stair edge at the wrong moment.')
+        problems += 1
+    else:
+        print(f'[ ok ] tof_spot_ahead {expected_spot:.4f} m follows from the '
+              f'mount height and tilt')
+
+    expected_axle = (p['cluster_circumradius'] * math.cos(math.pi / 3)
+                     + p['sub_wheel_radius'])
+    if abs(p['axle_height'] - expected_axle) > 1e-4:
+        print(f'[FAIL] axle_height is {p["axle_height"]} but a carrier '
+              f'straddling two sub-wheels sits at {expected_axle:.4f}')
+        problems += 1
+    else:
+        print(f'[ ok ] axle_height {expected_axle:.4f} m follows from the '
+              f'carrier straddle position')
+
+    return problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -177,6 +306,9 @@ def main() -> int:
         for name in sorted(uncovered):
             print(f'[note] {name} has no parameter file; every parameter uses '
                   f'its code default')
+
+    print()
+    problems += check_mirrors()
 
     print()
     if problems:
