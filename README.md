@@ -85,7 +85,7 @@ export R2D2_MEMORY=on
 
 ### Tests and design checks
 
-233 unit tests covering the geometry and control logic, none of which need ROS,
+234 unit tests covering the geometry and control logic, none of which need ROS,
 Gazebo, NATS, Postgres or a model endpoint:
 
 ```bash

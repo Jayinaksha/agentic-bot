@@ -5,7 +5,8 @@
   Source of truth for the stair geometry:
       r2d2_description/config/robot_params.yaml
 
-  staircase: 12 x 0.15m riser / 0.28m tread, flight 3.36 m, rise 1.80 m
+  staircase: 12 x 0.15m riser / 0.28m tread, flight 3.36 m, rise 1.80 m, x 1.40 to 4.76 at y 0.55
+  approach clearance west of the flight: 1.40 m
   ramp: 8.4 m run, 12.1 deg slope
   threshold_0: 22 mm sill at (2.2, 2.1)
   threshold_1: 30 mm sill at (6.6, 2.1)
@@ -497,17 +498,17 @@
 
     <model name="slab_south_east">
       <static>true</static>
-      <pose>6.4800 1.0000 1.7000 0 0 0.00000</pose>
+      <pose>6.8800 1.0000 1.7000 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>5.0400 2.0000 0.2000</size></box></geometry>
+          <geometry><box><size>4.2400 2.0000 0.2000</size></box></geometry>
           <surface>
             <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
             <contact><ode><kp>1e7</kp><kd>100</kd></ode></contact>
           </surface>
         </collision>
         <visual name="visual">
-          <geometry><box><size>5.0400 2.0000 0.2000</size></box></geometry>
+          <geometry><box><size>4.2400 2.0000 0.2000</size></box></geometry>
           <material>
             <ambient>0.75 0.72 0.68 1</ambient>
             <diffuse>0.75 0.72 0.68 1</diffuse>
@@ -518,17 +519,17 @@
 
     <model name="slab_south_west">
       <static>true</static>
-      <pose>0.1000 1.0000 1.7000 0 0 0.00000</pose>
+      <pose>0.7000 1.0000 1.7000 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>0.2000 2.0000 0.2000</size></box></geometry>
+          <geometry><box><size>1.4000 2.0000 0.2000</size></box></geometry>
           <surface>
             <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
             <contact><ode><kp>1e7</kp><kd>100</kd></ode></contact>
           </surface>
         </collision>
         <visual name="visual">
-          <geometry><box><size>0.2000 2.0000 0.2000</size></box></geometry>
+          <geometry><box><size>1.4000 2.0000 0.2000</size></box></geometry>
           <material>
             <ambient>0.75 0.72 0.68 1</ambient>
             <diffuse>0.75 0.72 0.68 1</diffuse>
@@ -539,7 +540,7 @@
 
     <model name="stair_step_0">
       <static>true</static>
-      <pose>0.3400 0.5500 0.0750 0 0 0.00000</pose>
+      <pose>1.5400 0.5500 0.0750 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 0.1500</size></box></geometry>
@@ -560,7 +561,7 @@
 
     <model name="stair_step_1">
       <static>true</static>
-      <pose>0.6200 0.5500 0.1500 0 0 0.00000</pose>
+      <pose>1.8200 0.5500 0.1500 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 0.3000</size></box></geometry>
@@ -581,7 +582,7 @@
 
     <model name="stair_step_2">
       <static>true</static>
-      <pose>0.9000 0.5500 0.2250 0 0 0.00000</pose>
+      <pose>2.1000 0.5500 0.2250 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 0.4500</size></box></geometry>
@@ -602,7 +603,7 @@
 
     <model name="stair_step_3">
       <static>true</static>
-      <pose>1.1800 0.5500 0.3000 0 0 0.00000</pose>
+      <pose>2.3800 0.5500 0.3000 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 0.6000</size></box></geometry>
@@ -623,7 +624,7 @@
 
     <model name="stair_step_4">
       <static>true</static>
-      <pose>1.4600 0.5500 0.3750 0 0 0.00000</pose>
+      <pose>2.6600 0.5500 0.3750 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 0.7500</size></box></geometry>
@@ -644,7 +645,7 @@
 
     <model name="stair_step_5">
       <static>true</static>
-      <pose>1.7400 0.5500 0.4500 0 0 0.00000</pose>
+      <pose>2.9400 0.5500 0.4500 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 0.9000</size></box></geometry>
@@ -665,7 +666,7 @@
 
     <model name="stair_step_6">
       <static>true</static>
-      <pose>2.0200 0.5500 0.5250 0 0 0.00000</pose>
+      <pose>3.2200 0.5500 0.5250 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 1.0500</size></box></geometry>
@@ -686,7 +687,7 @@
 
     <model name="stair_step_7">
       <static>true</static>
-      <pose>2.3000 0.5500 0.6000 0 0 0.00000</pose>
+      <pose>3.5000 0.5500 0.6000 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 1.2000</size></box></geometry>
@@ -707,7 +708,7 @@
 
     <model name="stair_step_8">
       <static>true</static>
-      <pose>2.5800 0.5500 0.6750 0 0 0.00000</pose>
+      <pose>3.7800 0.5500 0.6750 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 1.3500</size></box></geometry>
@@ -728,7 +729,7 @@
 
     <model name="stair_step_9">
       <static>true</static>
-      <pose>2.8600 0.5500 0.7500 0 0 0.00000</pose>
+      <pose>4.0600 0.5500 0.7500 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 1.5000</size></box></geometry>
@@ -749,7 +750,7 @@
 
     <model name="stair_step_10">
       <static>true</static>
-      <pose>3.1400 0.5500 0.8250 0 0 0.00000</pose>
+      <pose>4.3400 0.5500 0.8250 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 1.6500</size></box></geometry>
@@ -770,7 +771,7 @@
 
     <model name="stair_step_11">
       <static>true</static>
-      <pose>3.4200 0.5500 0.9000 0 0 0.00000</pose>
+      <pose>4.6200 0.5500 0.9000 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2800 0.9000 1.8000</size></box></geometry>
@@ -791,7 +792,7 @@
 
     <model name="stair_stringer_l">
       <static>true</static>
-      <pose>1.8800 1.0500 0.9000 0 0 0.00000</pose>
+      <pose>3.0800 1.0500 0.9000 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>3.3600 0.0800 1.8000</size></box></geometry>
@@ -812,7 +813,7 @@
 
     <model name="stair_stringer_r">
       <static>true</static>
-      <pose>1.8800 0.0500 0.9000 0 0 0.00000</pose>
+      <pose>3.0800 0.0500 0.9000 0 0 0.00000</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>3.3600 0.0800 1.8000</size></box></geometry>

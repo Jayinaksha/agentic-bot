@@ -61,6 +61,16 @@ radius and the staircase follows. `generate_house.py` refuses to emit a
 staircase the platform cannot mount, so the robot and its test world cannot
 drift out of sync.
 
+The same discipline extends to *where* the staircase is. `generate_house.py`
+owns its position and writes `r2d2_localization/config/floors.yaml` — the foot
+and head poses the navigation layer plans routes against — from the same
+constants. Those coordinates had previously been typed out a second time in
+`floor_manager.py`, and had drifted: the "foot of the stairs" pose sat **on the
+first step**, and the flight started 0.20 m from a wall, leaving a 0.36 m robot
+no room to square up to it. Both were invisible until the two sources were
+compared. CI now diffs the committed world and floor graph against a fresh
+generation, and asserts the poses land on solid floor.
+
 ### Two transmission modes
 
 ```
@@ -417,11 +427,11 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 
 ### Verified here
 
-- **233 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
+- **234 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
 
   | Suite | Tests | Covers |
   |---|---|---|
-  | `r2d2_locomotion` | 70 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, riser contact detection, arc odometry, ToF geometry, climb envelope |
+  | `r2d2_locomotion` | 71 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, riser contact detection, arc odometry, ToF geometry, climb envelope |
   | `r2d2_navigation` | 49 | TLS line fitting, doorway detection, docking sign conventions, cross-floor routing, descent marking |
   | `r2d2_memory` | 28 | Hash-chain tamper detection, merge radius, position fusion, embeddings |
   | `r2d2_perception` | 44 | Pixel→bearing, median ranging, world projection, VLA response parsing |

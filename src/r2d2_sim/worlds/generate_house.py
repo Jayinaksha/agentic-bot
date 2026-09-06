@@ -49,6 +49,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PARAMS = os.path.normpath(
     os.path.join(HERE, '..', '..', 'r2d2_description', 'config', 'robot_params.yaml'))
 
+# --- Staircase placement --------------------------------------------------
+# The flight runs east along the hallway at STAIR_Y, rising in +x.
+#
+# STAIR_X0 is not a free choice. The robot must square up to the flight before
+# committing, and it aligns by yawing on the spot, so it needs at least its own
+# length plus turning room clear of the bottom step. At 0.20 m (the first draft)
+# a 0.36 m robot could not approach the stairs at all.
+STAIR_X0 = 1.40        # m, west edge of the bottom step
+STAIR_Y = 0.55         # m, centreline of the flight
+MIN_APPROACH_CLEARANCE = 1.00   # m of clear floor west of the bottom step
+
 # --- House envelope -------------------------------------------------------
 HOUSE_W = 9.0          # x extent (m)
 HOUSE_D = 7.0          # y extent (m)
@@ -230,6 +241,30 @@ def build_ramp(x0, y0, floor_h, length, width, yaw=0.0):
     return model, math.degrees(slope)
 
 
+def floor_transitions(cfg):
+    """Where the staircase is, in the form floor_manager needs.
+
+    Derived from the same constants the world is built from, so the navigation
+    layer cannot end up aiming at a staircase that has moved. `foot` is the pose
+    the robot drives to before climbing and must be clear of the bottom step;
+    `head` is where it ends up on the upper floor, past the stairwell opening.
+    """
+    st = cfg['stairs']
+    flight = st['steps'] * st['tread']
+    return [{
+        'from_floor': 0,
+        'to_floor': 1,
+        'kind': 'stairs',
+        # Half the clearance west of the flight: room to turn, close enough that
+        # the ToF beams already see the first riser.
+        'foot': {'x': round(STAIR_X0 - MIN_APPROACH_CLEARANCE / 2.0, 3),
+                 'y': STAIR_Y},
+        # Past the east edge of the stairwell, so the robot is on solid slab.
+        'head': {'x': round(STAIR_X0 + flight + 0.55, 3), 'y': STAIR_Y},
+        'heading': 0.0,
+    }]
+
+
 def build_world(cfg, with_ramp=True):
     st = cfg['stairs']
     floor_h = st['riser'] * st['steps']          # floor-to-floor rise
@@ -263,8 +298,11 @@ def build_world(cfg, with_ramp=True):
                                  y_gaps, z0, WALL_H, rgba)
 
     # --- upper floor slab ---------------------------------------------------
-    # A stairwell + ramp well is left open so the robot can actually arrive.
-    well_x0, well_x1 = 0.2, 0.2 + st['steps'] * st['tread'] + 0.4
+    # The stairwell is left open so the robot can arrive. Its east edge is the
+    # end of the flight EXACTLY: any gap there is a hole between the top tread
+    # and the slab, and the robot drives into it having just finished climbing.
+    flight_span = st['steps'] * st['tread']
+    well_x0, well_x1 = STAIR_X0, STAIR_X0 + flight_span
     slab_z = upper_z - SLAB_T / 2.0
     # slab is split into three pieces around the well (which spans y in [0, 2.0])
     parts.append(_box('slab_north', HOUSE_W / 2.0, (2.0 + HOUSE_D) / 2.0, slab_z,
@@ -277,11 +315,19 @@ def build_world(cfg, with_ramp=True):
                           well_x0, 2.0, SLAB_T, rgba=(0.75, 0.72, 0.68, 1)))
 
     # --- staircase ----------------------------------------------------------
-    stair_y = 0.55
-    stairs, flight_len = build_staircase(cfg, x0=0.2, y0=stair_y, yaw=0.0)
+    if STAIR_X0 < MIN_APPROACH_CLEARANCE:
+        raise SystemExit(
+            f'STAIR_X0 ({STAIR_X0} m) leaves less than '
+            f'{MIN_APPROACH_CLEARANCE} m of floor west of the bottom step. The '
+            f'robot cannot square up to a flight it is already standing on.')
+
+    stairs, flight_len = build_staircase(cfg, x0=STAIR_X0, y0=STAIR_Y, yaw=0.0)
     parts += stairs
     notes.append(f"staircase: {st['steps']} x {st['riser']}m riser / "
-                 f"{st['tread']}m tread, flight {flight_len:.2f} m, rise {floor_h:.2f} m")
+                 f"{st['tread']}m tread, flight {flight_len:.2f} m, "
+                 f"rise {floor_h:.2f} m, x {STAIR_X0:.2f} to "
+                 f"{STAIR_X0 + flight_len:.2f} at y {STAIR_Y:.2f}")
+    notes.append(f"approach clearance west of the flight: {STAIR_X0:.2f} m")
 
     # --- ramp ---------------------------------------------------------------
     if with_ramp:
@@ -406,6 +452,9 @@ def main():
     ap.add_argument('--out', default=os.path.join(HERE, 'house_two_floor.sdf'))
     ap.add_argument('--no-ramp', action='store_true',
                     help='omit the ramp, forcing the stair route')
+    ap.add_argument('--floors-out', default=os.path.normpath(os.path.join(
+        HERE, '..', '..', 'r2d2_localization', 'config', 'floors.yaml')),
+        help='where to write the floor graph floor_manager reads')
     args = ap.parse_args()
 
     with open(args.params) as fh:
@@ -415,6 +464,14 @@ def main():
     with open(args.out, 'w') as fh:
         fh.write(world)
 
+    # The navigation layer needs to know where the staircase is. Emitting it
+    # here, from the same constants, is what stops floor_manager aiming at a
+    # flight that has since moved - the coordinates were previously typed out a
+    # second time by hand, and the "foot of the stairs" pose was on the first step.
+    if args.floors_out:
+        _write_floors_config(args.floors_out, cfg, floor_h)
+        print(f'wrote {args.floors_out}')
+
     reach = cfg['platform']['cluster_circumradius'] + cfg['platform']['sub_wheel_radius']
     margin = (reach - cfg['stairs']['riser']) / cfg['stairs']['riser'] * 100.0
     print(f"wrote {args.out}")
@@ -423,6 +480,35 @@ def main():
     print(f"  climb margin        : {margin:.1f} %")
     for n in notes:
         print(f"  {n}")
+
+
+def _write_floors_config(path, cfg, floor_h):
+    """Write floor_manager's parameter file, derived from the world."""
+    transitions = floor_transitions(cfg)
+    flat = []
+    for t in transitions:
+        flat += [float(t['from_floor']), float(t['to_floor']),
+                 t['foot']['x'], t['foot']['y'],
+                 t['head']['x'], t['head']['y'], t['heading']]
+
+    body = f'''# GENERATED FILE - do not edit by hand.
+# Regenerate with: python3 src/r2d2_sim/worlds/generate_house.py
+#
+# The staircase coordinates below are derived from the same constants the
+# Gazebo world is built from. They were previously typed out a second time in
+# floor_manager.py, where the "foot of the stairs" pose had drifted onto the
+# first step - close enough to look right, wrong enough that the robot would
+# have started every climb already standing on the flight.
+
+floor_manager:
+  ros__parameters:
+    floor_heights: [0.0, {floor_h:.3f}]
+    # [from_floor, to_floor, foot_x, foot_y, head_x, head_y, heading] per
+    # transition, flattened because ROS 2 parameters take no nested structures.
+    transitions: {flat}
+'''
+    with open(path, 'w') as fh:
+        fh.write(body)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,15 @@
+# GENERATED FILE - do not edit by hand.
+# Regenerate with: python3 src/r2d2_sim/worlds/generate_house.py
+#
+# The staircase coordinates below are derived from the same constants the
+# Gazebo world is built from. They were previously typed out a second time in
+# floor_manager.py, where the "foot of the stairs" pose had drifted onto the
+# first step - close enough to look right, wrong enough that the robot would
+# have started every climb already standing on the flight.
+
+floor_manager:
+  ros__parameters:
+    floor_heights: [0.0, 1.800]
+    # [from_floor, to_floor, foot_x, foot_y, head_x, head_y, heading] per
+    # transition, flattened because ROS 2 parameters take no nested structures.
+    transitions: [0.0, 1.0, 0.9, 0.55, 5.31, 0.55, 0.0]

@@ -76,16 +76,68 @@ jobs:
           print(f'world parses: {len(models)} models')
           EOF
 
-      - name: committed world matches the generator
+      # The generator writes two files: the world, and the floor graph the
+      # navigation layer plans staircase routes against. Both must be in step
+      # with robot_params.yaml, or the robot drives to a flight that has moved.
+      - name: committed world and floor graph match the generator
         run: |
-          python src/r2d2_sim/worlds/generate_house.py --out /tmp/regen.sdf
+          python src/r2d2_sim/worlds/generate_house.py \
+            --out /tmp/regen.sdf --floors-out /tmp/regen_floors.yaml
+          stale=0
           if ! diff -q src/r2d2_sim/worlds/house_two_floor.sdf /tmp/regen.sdf; then
             echo "::error::house_two_floor.sdf is stale."
-            echo "Regenerate it: python3 src/r2d2_sim/worlds/generate_house.py"
             diff -u src/r2d2_sim/worlds/house_two_floor.sdf /tmp/regen.sdf | head -40
+            stale=1
+          fi
+          if ! diff -q src/r2d2_localization/config/floors.yaml /tmp/regen_floors.yaml; then
+            echo "::error::floors.yaml is stale."
+            diff -u src/r2d2_localization/config/floors.yaml /tmp/regen_floors.yaml | head -20
+            stale=1
+          fi
+          if [ "$stale" = "1" ]; then
+            echo "Regenerate both: python3 src/r2d2_sim/worlds/generate_house.py"
             exit 1
           fi
-          echo "committed world is up to date"
+          echo "committed world and floor graph are up to date"
+
+      # The staircase must be reachable: the robot squares up by yawing on the
+      # spot, so it needs its own length plus turning room clear of the bottom
+      # step, and the transition poses must not sit on the flight or in the
+      # stairwell opening.
+      - name: staircase is approachable and its poses are on solid floor
+        run: |
+          python - <<'EOF'
+          import sys, yaml
+          sys.path.insert(0, 'src/src/r2d2_sim/worlds'.replace('src/src', 'src'))
+          from generate_house import (MIN_APPROACH_CLEARANCE, STAIR_X0,
+                                      floor_transitions)
+
+          cfg = yaml.safe_load(
+              open('src/r2d2_description/config/robot_params.yaml'))
+          body = cfg['platform']['body_length']
+          flight = cfg['stairs']['steps'] * cfg['stairs']['tread']
+          t = floor_transitions(cfg)[0]
+          problems = []
+
+          if STAIR_X0 < MIN_APPROACH_CLEARANCE:
+              problems.append(
+                  f'only {STAIR_X0} m of floor west of the bottom step')
+          gap = STAIR_X0 - t['foot']['x']
+          if gap <= body / 2:
+              problems.append(
+                  f'the foot pose is {gap:.2f} m from the bottom step, inside '
+                  f'the {body / 2:.2f} m half-length of the robot')
+          if t['head']['x'] <= STAIR_X0 + flight:
+              problems.append(
+                  f'the head pose x={t["head"]["x"]} is inside the stairwell '
+                  f'opening, which ends at x={STAIR_X0 + flight:.2f}')
+
+          for problem in problems:
+              print(f'::error::{problem}')
+          print(f'foot {t["foot"]}, head {t["head"]}, '
+                f'{gap:.2f} m of approach clearance')
+          sys.exit(1 if problems else 0)
+          EOF
 
   static:
     name: parse and wiring checks
@@ -177,6 +229,11 @@ jobs:
                   print(f'{topic}: single writer (climb_fsm)')
           sys.exit(0 if ok else 1)
           EOF
+
+      # A misspelled ROS 2 parameter fails silently: the node runs on its
+      # hard-coded default and the value you tuned is ignored.
+      - name: parameters match the nodes they configure
+        run: python scripts/check_params.py
 
       - name: referenced scripts exist
         run: |

@@ -73,7 +73,14 @@ class FloorManager(Node):
             # Transition graph, flattened because ROS 2 parameters do not take
             # nested structures: [from_floor, to_floor, foot_x, foot_y,
             # head_x, head_y, heading] repeated.
-            ('transitions', [0.0, 1.0, 0.35, 0.55, 3.60, 0.55, 0.0]),
+            #
+            # The real values come from config/floors.yaml, which the Gazebo
+            # world generator writes from the same constants it builds the
+            # staircase from. This default is EMPTY on purpose: a plausible
+            # hard-coded staircase is worse than none, because the robot drives
+            # confidently to a flight that is not there. An empty graph makes
+            # the navigation layer say so instead.
+            ('transitions', []),
         ])
         g = self.get_parameter
         self.map_dir = g('map_directory').value
@@ -114,6 +121,14 @@ class FloorManager(Node):
         self._publish_floor()
         self._publish_graph()
         self.create_timer(0.5, self._tick)
+
+        if not self.transitions and len(self.floor_heights) > 1:
+            self.get_logger().error(
+                f'{len(self.floor_heights)} floors are configured but no '
+                f'transitions between them, so no cross-floor route can be '
+                f'planned. Load config/floors.yaml, which '
+                f'src/r2d2_sim/worlds/generate_house.py writes from the same '
+                f'constants the staircase is built from.')
 
         self.get_logger().info(
             f'floor manager up: {len(self.floor_heights)} floors, '
