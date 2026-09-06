@@ -502,6 +502,24 @@ compared, or a number computed.
 | Gait match | One 120° tumble advances 0.199 m against a 0.318 m step pitch (ratio 0.63) | Matching exactly needs `cluster_circumradius` = 0.183 m, which costs 60% more peak torque and a much taller robot. See the note below on what this ratio does and does not tell you |
 | Torque | Peak 4.7 N·m per cluster when two clusters carry the lift | A real BOM constraint, now recorded as `min_cluster_torque` in `robot_params.yaml`. A typical hobby gearmotor (2–4 N·m) will stall on the first riser |
 
+### Verification, at a glance
+
+| Claim | Status |
+|---|---|
+| Kinematics, terrain geometry, docking, routing, fusion, grounding, tool parsing | 262 unit tests |
+| Platform can geometrically mount the staircase | `analyse_climb.py` (reach, tread, tipping, torque) |
+| Robot fits its doorways and hallways | `check_clearances.py` |
+| Every room is reachable | flood-fill over the generated world |
+| Duplicated and derived constants agree | `check_params.py` |
+| MCP server loads; all 15 tools carry schemas | loaded against real SDK 2.1.1, in CI |
+| Nav2 plugin names match the target distro | `check_nav2_plugins.py` |
+| Launch/xacro references survive `colcon build` | `check_launch.py` |
+| SQL parses and matches the schema | `check_sql.py` via pglast |
+| VLA request shape matches NVIDIA's API | checked against NVIDIA's reference |
+| **The robot actually climbs the stairs** | **unverified — needs Gazebo** |
+| **Nav2 parameter values are well tuned** | **unverified — needs a running stack** |
+| **The VLA returns usable JSON in practice** | **unverified — needs a live call** |
+
 ### NOT verified
 
 Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
@@ -529,8 +547,12 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   load. On Humble every plugin here would fail and the stack would come up dead.
   To run on Humble, `check_nav2_plugins.py --distro humble` lists everything
   that needs changing.
-- **No model endpoint has been called.** The prompt and response handling are
-  written against Cosmos Reason 2's documented output shape.
+- **No model endpoint has been called.** The request *shape* has been verified
+  against NVIDIA's Cosmos Reason 2 API reference — NIM for VLMs follows the
+  OpenAI spec, with images as an `image_url` content block carrying a data URI,
+  which is what the node sends, and JPEG is a supported encoding. What is
+  unverified is the response: whether the model reliably returns the JSON this
+  prompt asks for, which needs an actual call.
 - The MCP server *has* now been loaded against the real SDK: all 15 tools
   register and convert to chat-API definitions with their schemas intact, and
   CI re-checks that on every push. What has not been exercised is a live tool

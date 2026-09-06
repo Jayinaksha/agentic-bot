@@ -16,6 +16,12 @@ either NVIDIA's hosted catalogue or your own NIM/vLLM deployment on a cloud GPU:
     R2D2_VLA_MODEL=nvidia/cosmos-reason2-8b
     R2D2_NVIDIA_API_KEY=nvapi-...
 
+A 2B variant (nvidia/cosmos-reason2-2b) exists and is worth trying first: this
+node asks for object boxes and a one-line scene description, not open-ended
+reasoning, and the smaller model is markedly cheaper per frame. Raise
+min_interval before reaching for a bigger model - most of the value here comes
+from looking carefully at a handful of places, not from looking continuously.
+
     # or self-hosted, e.g. a Nebius or GCP GPU VM running the NIM container
     R2D2_VLA_BASE_URL=http://10.0.0.5:8000/v1
 
@@ -382,6 +388,12 @@ class VlaNode(Node):
         if self.api_key:
             headers['Authorization'] = f'Bearer {self.api_key}'
 
+        # NIM for VLMs follows the OpenAI spec for images: a content list with
+        # an image_url block carrying a data URI. Verified against NVIDIA's
+        # Cosmos Reason 2 API reference rather than assumed - some inference
+        # servers instead expect an <img> tag inline in the text, and the two
+        # fail differently enough to be worth pinning down.
+        # JPG, JPEG and PNG are the supported encodings; _encode emits JPEG.
         body = {
             'model': self.model,
             'messages': [{
