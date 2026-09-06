@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from r2d2_mcp.config import LlmConfig
+from r2d2_mcp.config import LlmConfig, redact_url
 
 log = logging.getLogger('r2d2.llm')
 
@@ -91,11 +91,20 @@ class LlmClient:
             body['tools'] = tools
             body['tool_choice'] = 'auto'
 
-        response = await client.post('/chat/completions', json=body)
+        try:
+            response = await client.post('/chat/completions', json=body)
+        except Exception as exc:                  # noqa: BLE001 - network errors vary
+            # The message is redacted before it goes anywhere: this exception
+            # reaches the agent, which puts it in its episode record and its
+            # user-facing output, and httpx errors can embed a URL that carries
+            # credentials.
+            raise LlmError(f'{type(exc).__name__}: '
+                           f'{redact_url(str(exc))}') from None
+
         if response.status_code >= 400:
             raise LlmError(
                 f'{self.config.model} returned {response.status_code}: '
-                f'{response.text[:400]}')
+                f'{redact_url(response.text[:400])}')
 
         payload = response.json()
         choice = payload['choices'][0]

@@ -55,6 +55,7 @@ import json
 import math
 import os
 import queue
+import re
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -412,13 +413,36 @@ class VlaNode(Node):
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.post(f'{self.base_url}/chat/completions',
                                        headers=headers, json=body)
-                response.raise_for_status()
+                # Deliberately NOT raise_for_status(). It puts the full request
+                # URL in its message, and a self-hosted endpoint is quite
+                # reasonably configured as https://user:password@host/v1 - which
+                # would then be written to the ROS log on every failed frame.
+                # Status and a body excerpt say everything useful without it.
+                if response.status_code >= 400:
+                    self.get_logger().warn(
+                        f'VLA endpoint returned {response.status_code}: '
+                        f'{response.text[:200]}')
+                    return None
                 content = response.json()['choices'][0]['message']['content']
         except Exception as exc:                  # noqa: BLE001 - many failure modes
-            self.get_logger().warn(f'VLA request failed: {exc}')
+            # Log the exception TYPE and a redacted message. Some httpx errors
+            # embed the URL, and the URL may carry credentials.
+            self.get_logger().warn(
+                f'VLA request failed: {type(exc).__name__}: '
+                f'{_redact_urls(str(exc))}')
             return None
 
         return extract_json(content)
+
+
+def _redact_urls(text: str) -> str:
+    """Strip userinfo from any URL in a string.
+
+    Deliberately duplicated rather than imported from r2d2_mcp: perception must
+    run without the agent installed, and a four-line security helper is a better
+    trade than a package dependency. It is tested in both places.
+    """
+    return re.sub(r'(\w+://)[^/@\s]+@', r'\1***@', text)
 
 
 def _wrap(angle: float) -> float:

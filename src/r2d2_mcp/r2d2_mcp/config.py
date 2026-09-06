@@ -23,6 +23,7 @@ HTTPS calls, so nothing has to be exposed inbound.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -64,8 +65,22 @@ class LlmConfig:
         return headers
 
     def describe(self) -> str:
+        """A log-safe one-liner. The base URL is redacted because a self-hosted
+        endpoint is quite reasonably written as https://user:password@host/v1,
+        and this string is logged at startup."""
         auth = 'with API key' if self.api_key else 'no API key (self-hosted?)'
-        return f'{self.model} at {self.base_url} ({auth})'
+        return f'{self.model} at {redact_url(self.base_url)} ({auth})'
+
+
+def redact_url(text: str) -> str:
+    """Strip userinfo from any URL in a string.
+
+    Credentials reach logs by two routes: a URL configured with them inline, and
+    httpx's raise_for_status(), which embeds the full request URL in its message.
+    Anything that prints a URL, or an exception that might contain one, goes
+    through here first.
+    """
+    return re.sub(r'(\w+://)[^/@\s]+@', r'\1***@', text)
 
 
 @dataclass

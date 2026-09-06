@@ -427,15 +427,15 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 
 ### Verified here
 
-- **262 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
+- **275 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
 
   | Suite | Tests | Covers |
   |---|---|---|
   | `r2d2_locomotion` | 71 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, riser contact detection, arc odometry, ToF geometry, climb envelope |
   | `r2d2_navigation` | 49 | TLS line fitting, doorway detection, docking sign conventions, cross-floor routing, descent marking |
   | `r2d2_memory` | 28 | Hash-chain tamper detection, merge radius, position fusion, embeddings |
-  | `r2d2_perception` | 44 | Pixel→bearing, median ranging, world projection, VLA response parsing |
-  | `r2d2_mcp` | 42 | Tool-call parsing, agent loop, failure paths, dry run |
+  | `r2d2_perception` | 47 | Pixel→bearing, median ranging, world projection, VLA response parsing |
+  | `r2d2_mcp` | 52 | Tool-call parsing, agent loop, failure paths, dry run |
   | `r2d2_sim` | 21 | Wall-gap splitting, world geometry, and a flood-fill proving every room is actually reachable |
 
 - `scripts/analyse_climb.py` — quasi-static analysis of reach, tread fit, gait
@@ -519,6 +519,7 @@ compared, or a number computed.
 | Launch/xacro references survive `colcon build` | `check_launch.py` |
 | SQL parses and matches the schema | `check_sql.py` via pglast |
 | VLA request shape matches NVIDIA's API | checked against NVIDIA's reference |
+| Credentials do not reach logs, the ledger, or the model | tested against real httpx/asyncpg failures |
 | **The robot actually climbs the stairs** | **unverified — needs Gazebo** |
 | **Nav2 parameter values are well tuned** | **unverified — needs a running stack** |
 | **The VLA returns usable JSON in practice** | **unverified — needs a live call** |
@@ -566,6 +567,29 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   all 14 hand-written queries in `store.py` are checked to parse and to
   reference only columns the schema defines (`check_sql.py`, in CI). What that
   cannot tell you is whether the *indexes* are the right ones, which needs data.
+
+### Credentials
+
+Three places handle secrets: the NVIDIA API key, the Postgres DSN, and whatever
+a self-hosted endpoint URL carries. Two properties matter more here than in an
+ordinary service:
+
+- **Tool errors reach the model.** The agent puts a failed tool's message into
+  its context, which is sent to a third-party inference endpoint.
+- **The ledger is append-only and tamper-evident.** Anything leaked into it is
+  permanent by design — that is the whole point of the hash chain.
+
+Tested rather than assumed, against real failures: neither httpx nor asyncpg put
+credentials in a connection-failure message. But `raise_for_status()` embeds the
+**full request URL**, and a self-hosted NIM is quite reasonably configured as
+`https://user:password@nim.internal/v1` — so the VLA node would have written
+that password to the ROS log on every failed frame. It no longer calls
+`raise_for_status()` at all; status and a body excerpt say everything useful.
+
+Anything that prints a URL, or an exception that might contain one, is redacted
+first: `redact_url()` strips userinfo while keeping the host, which is
+diagnostic rather than secret. The API key reaches the `Authorization` header
+and nowhere else — `describe()`, logged at startup, never prints it.
 
 ### Falsifying the tests, not just the code
 

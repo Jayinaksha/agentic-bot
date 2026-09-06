@@ -321,3 +321,40 @@ def test_a_bare_array_is_not_accepted():
 
 def test_truncated_json_returns_none_rather_than_guessing():
     assert extract_json('{"room": "kitchen", "objects": [{"label"') is None
+
+
+# ------------------------------------------------ credential redaction
+#
+# vla_node keeps its own copy of this helper rather than importing from
+# r2d2_mcp: perception must run without the agent installed. Duplication of a
+# four-line security helper is the better trade, but it has to be tested in both
+# places or the copies drift.
+
+def _redact(text):
+    import re
+    return re.sub(r'(\w+://)[^/@\s]+@', r'\1***@', text)
+
+
+def test_vla_redaction_strips_userinfo():
+    assert _redact('https://admin:HUNTER2@nim.internal:8000/v1') == \
+        'https://***@nim.internal:8000/v1'
+
+
+def test_vla_redaction_leaves_clean_urls_alone():
+    url = 'https://integrate.api.nvidia.com/v1'
+    assert _redact(url) == url
+
+
+def test_vla_redaction_matches_the_mcp_copy():
+    """The two copies must behave identically, or one of them is wrong."""
+    import os
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..',
+                                    'r2d2_mcp'))
+    from r2d2_mcp.config import redact_url
+    for sample in ('https://a:b@h/v1',
+                   'https://clean.example/v1',
+                   'postgresql://u:p@db:5432/x',
+                   'no url here',
+                   'two https://a:b@one/v1 and https://c:d@two/v1'):
+        assert _redact(sample) == redact_url(sample), sample

@@ -17,6 +17,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from r2d2_mcp.config import LlmConfig, redact_url  # noqa: E402
 from r2d2_mcp.llm import (  # noqa: E402
     Turn, _json_objects, _parse_arguments, _parse_tool_calls,
     mcp_tools_to_openai, tool_input_schema)
@@ -259,3 +260,71 @@ def test_a_mixed_listing_converts_completely():
         _FakeToolV2('new', 'New.', SCHEMA),
     ])
     assert all(c['function']['parameters']['properties'] for c in converted)
+
+
+# ------------------------------------------------------ credential redaction
+#
+# Credentials reach logs by two routes. A self-hosted endpoint is quite
+# reasonably configured as https://user:password@host/v1, and httpx's
+# raise_for_status() embeds the full request URL in its exception message. The
+# agent then puts LlmError text into its episode record and its user-facing
+# output, so an unredacted message would be persisted and shown.
+
+def test_userinfo_is_stripped_from_a_url():
+    assert redact_url('https://admin:HUNTER2@nim.internal:8000/v1') == \
+        'https://***@nim.internal:8000/v1'
+
+
+def test_a_url_inside_a_sentence_is_redacted():
+    message = "Client error '401 Unauthorized' for url 'https://a:b@h/v1'"
+    assert 'b@h' not in redact_url(message)
+    assert '***@h' in redact_url(message)
+
+
+def test_a_url_without_credentials_is_untouched():
+    url = 'https://integrate.api.nvidia.com/v1'
+    assert redact_url(url) == url
+
+
+def test_a_postgres_dsn_is_redacted_too():
+    assert redact_url('postgresql://r2d2:pw@db:5432/r2d2') == \
+        'postgresql://***@db:5432/r2d2'
+
+
+def test_the_host_survives_redaction():
+    """The host is diagnostic and not secret; losing it would make the log
+    useless."""
+    assert 'nim.internal' in redact_url('https://u:p@nim.internal/v1')
+
+
+def test_several_urls_in_one_message():
+    text = 'tried https://a:b@one/v1 then https://c:d@two/v1'
+    out = redact_url(text)
+    assert 'b@one' not in out and 'd@two' not in out
+    assert out.count('***@') == 2
+
+
+def test_plain_text_is_unchanged():
+    assert redact_url('connection refused') == 'connection refused'
+
+
+def test_describe_redacts_the_configured_endpoint():
+    """This string is logged at startup."""
+    config = LlmConfig(base_url='https://admin:HUNTER2@nim.internal/v1',
+                       model='m', api_key='k')
+    assert 'HUNTER2' not in config.describe()
+    assert 'nim.internal' in config.describe()
+
+
+def test_describe_does_not_print_the_api_key():
+    config = LlmConfig(base_url='https://h/v1', model='m',
+                       api_key='nvapi-SECRET')
+    assert 'SECRET' not in config.describe()
+    assert 'with API key' in config.describe()
+
+
+def test_headers_carry_the_key_but_describe_does_not():
+    """The key must reach the wire and nowhere else."""
+    config = LlmConfig(base_url='https://h/v1', model='m', api_key='nvapi-S3CRET')
+    assert config.headers()['Authorization'] == 'Bearer nvapi-S3CRET'
+    assert 'S3CRET' not in config.describe()
