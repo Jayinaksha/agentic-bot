@@ -518,6 +518,14 @@ compared, or a number computed.
 | "Foot of stairs" pose on the first step | Climb starts already standing on the flight | Generated vs. hand-typed coordinates |
 | 0.20 m of approach clearance | A 0.36 m robot cannot square up to the flight | Same comparison |
 | Contact detector 4× slow | Would have missed its own confirmation window | Tracing the detector by hand |
+
+Four later checks — mass model, inertia realisability, agent tool contract and
+simulated-sensor wiring — found **nothing wrong**, and that is worth stating
+plainly rather than quietly omitting. They are preventive: each closes a gap
+where two descriptions of the same thing sit in different files with nothing
+joining them but a string or a number typed twice, which is the shape every bug
+in the table above turned out to have. Each was falsified by injection before
+being trusted, so a green result from them means something.
 | Inflation covered the whole doorway | No zero-cost lane through any door in the house: the controller crawls at every threshold and the planner detours around doors | `check_clearances.py` |
 | A doorway placed off its wall lengthened it | A door mistyped at x=99 produced a 98 m wall across the map instead of a 9 m one, silently | Falsifying the reachability test |
 | MCP server written against SDK 1.x | `pip install mcp` now resolves to 2.x, where `FastMCP` no longer exists — the server would not import at all | Installing the SDK and loading it |
