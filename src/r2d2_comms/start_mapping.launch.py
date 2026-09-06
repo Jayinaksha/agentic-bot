@@ -30,7 +30,7 @@ def generate_launch_description():
         # 3. Start the Laser Scan Matcher (provides odom -> base_link)
         Node(
             package='laser_scan_matcher',
-            executable='laser_scan_matcher_node',
+            executable='laser_scan_matcher',  # CMakeLists installs 'laser_scan_matcher', not '..._node'
             name='laser_scan_matcher',
             parameters=[{
                 'publish_tf': True,

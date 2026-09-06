@@ -63,7 +63,7 @@ def generate_launch_description():
         # --- odom -> base_link --------------------------------------------
         Node(
             package='ros2_laser_scan_matcher',
-            executable='laser_scan_matcher_node',
+            executable='laser_scan_matcher',
             name='laser_scan_matcher',
             output='screen',
             parameters=[scan_matcher_cfg, sim],

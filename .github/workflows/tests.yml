@@ -298,6 +298,14 @@ jobs:
       # "/". The names are not aliased, so a wrongly-styled plugin does not warn,
       # it fails to load. A half-finished migration is worst: some plugins load,
       # some do not, and the stack limps in a way that looks like bad tuning.
+      # A config file can exist in src/, be referenced correctly, and still be
+      # missing at run time because setup.py never installed it. Likewise an
+      # executable name: the launch file asked for laser_scan_matcher_node while
+      # the CMakeLists installs laser_scan_matcher, and only building it would
+      # have shown that.
+      - name: launch and xacro references resolve after install
+        run: python scripts/check_launch.py
+
       - name: Nav2 plugin names are consistently styled
         run: python scripts/check_nav2_plugins.py
 

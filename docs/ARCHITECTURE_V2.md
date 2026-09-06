@@ -487,6 +487,7 @@ compared, or a number computed.
 | MCP server written against SDK 1.x | `pip install mcp` now resolves to 2.x, where `FastMCP` no longer exists — the server would not import at all | Installing the SDK and loading it |
 | `Tool.inputSchema` renamed in SDK 2.0 | All 15 tools advertised to the model as taking **no arguments** — every call arrives empty, with nothing in any log to say why | The same |
 | Nav2 config was Jazzy-only, undocumented | On Humble every plugin fails to load and the stack comes up dead | `check_nav2_plugins.py` |
+| Launch asked for `laser_scan_matcher_node`; the CMakeLists installs `laser_scan_matcher` | Localisation launch dies on "executable not found". **Inherited from v1's `start_mapping.launch.py`**, which has the same error | `check_launch.py` |
 
 ### Known warnings, accepted deliberately
 
@@ -505,7 +506,13 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   cleanly. The physics block is already set for a 1 ms step with a stiff
   solver for this reason.
 - **No launch file has been executed.** Node names, remappings and parameter
-  plumbing are written carefully but not run.
+  plumbing are written carefully but not run. What *has* been checked
+  statically, by `check_launch.py`: every `Node(package=, executable=)` names an
+  executable that package really installs (from `console_scripts` *or* CMake
+  `add_executable` + `install(TARGETS)`), and every config and xacro path
+  resolves to a file that is not merely present in `src/` but actually installed
+  into the share directory. That last distinction matters — a file can exist,
+  be referenced correctly, and still be absent after `colcon build`.
 - **Nav2 parameter *values* are unvalidated** against a running Nav2 — the
   tuning is reasoned, not measured. The plugin *names* have been checked: all 20
   use the `::` style Nav2 standardised on in Jazzy (PR #4220), verified
