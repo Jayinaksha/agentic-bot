@@ -33,6 +33,24 @@ ABORT     Reverse away from the flight and latch a failure. Triggered by
 
 Progress is measured from IMU-integrated vertical rise, not from wheels, since
 wheel odometry is meaningless while tumbling.
+
+Direction
+---------
+The same states serve both directions, but the two are not mirror images.
+
+Going UP, the riser stops the platform and the resulting stall is an unambiguous
+"you are here" event. Going DOWN there is no such event: the ToF beams see the
+drop while the wheels are still on solid floor, and a robot that keeps rolling
+drives off the top step. Descent is therefore dead-reckoned over a short,
+measured creep - the beam spot sits a known distance ahead of the front cluster
+contact, so the robot creeps exactly that far, less a margin, before committing.
+
+Descent is OFF by default (`allow_descent`). It is the more dangerous
+manoeuvre, it has not been validated on hardware or in simulation, and a robot
+that gets it wrong falls down a flight of stairs. With it off the FSM refuses a
+descent explicitly rather than failing as "no riser found", which is what it
+used to do - the route planner emits descend legs, so silence here meant the
+robot could go upstairs and never come back down.
 """
 
 import json
@@ -49,7 +67,10 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Bool, String
 
-from r2d2_locomotion.kinematics import RiserContact
+from r2d2_locomotion.kinematics import (DIRECTION_DOWN, DIRECTION_UP,
+                                        EdgeApproach, RiserContact,
+                                        descent_creep_distance,
+                                        descent_is_geometrically_safe)
 
 
 class State(Enum):
@@ -89,6 +110,16 @@ class ClimbFsm(Node):
             ('settle_duration', 1.5),
             ('abort_backoff_distance', 0.35),
             ('autonomous_entry', False),
+            # Descent: off by default. See the module docstring.
+            ('allow_descent', False),
+            ('descent_speed', 0.07),
+            ('descent_margin', 0.05),
+            ('edge_confirm_cycles', 4),
+            # ToF geometry, mirrored from terrain_monitor, used to work out how
+            # far the platform may creep after first seeing a drop.
+            ('tof_forward_offset', 0.180),
+            ('tof_spot_ahead', 0.290),
+            ('wheelbase', 0.260),
         ])
         g = self.get_parameter
         self.rate = g('rate').value
@@ -109,6 +140,20 @@ class ClimbFsm(Node):
         # normally requested explicitly by the navigation layer rather than
         # triggered by whatever the ToF beams happen to see.
         self.autonomous_entry = g('autonomous_entry').value
+        self.allow_descent = g('allow_descent').value
+        self.descent_speed = g('descent_speed').value
+
+        creep = descent_creep_distance(
+            g('tof_forward_offset').value, g('tof_spot_ahead').value,
+            g('wheelbase').value, g('descent_margin').value)
+        self._descent_safe = descent_is_geometrically_safe(creep)
+        self._edge = EdgeApproach(creep, g('edge_confirm_cycles').value)
+        if self.allow_descent and not self._descent_safe:
+            self.get_logger().error(
+                f'descent is enabled but the ToF beams land {abs(creep):.3f} m '
+                f'BEHIND the front cluster contact: the robot cannot see an '
+                f'edge before its wheels reach it. Descent disabled.')
+            self.allow_descent = False
 
         self.state = State.IDLE
         self.terrain = {}
@@ -117,6 +162,7 @@ class ClimbFsm(Node):
         self._state_entered = time.time()
         self._climb_started = 0.0
         self._requested = False
+        self._direction = DIRECTION_UP
         self._last_result = 'none'
 
         # IMU-integrated vertical rise, the only trustworthy progress signal
@@ -157,8 +203,10 @@ class ClimbFsm(Node):
         self.create_subscription(Bool, '/climb/request', self._on_request, 10)
 
         self.create_timer(1.0 / self.rate, self._tick)
-        self.get_logger().info('climb FSM up, autonomous entry: '
-                               f'{"on" if self.autonomous_entry else "off"}')
+        self.get_logger().info(
+            f'climb FSM up. Autonomous entry: '
+            f'{"on" if self.autonomous_entry else "off"}. Descent: '
+            f'{f"on, creeping {creep:.3f} m to the edge" if self.allow_descent else "off"}')
 
     # ---------------------------------------------------------------- inputs
 
@@ -220,6 +268,7 @@ class ClimbFsm(Node):
         self._state_entered = time.time()
         if state in (State.ALIGN, State.APPROACH):
             self._contact.reset()
+            self._edge.reset()
         if state == State.CLIMB:
             self._climb_started = time.time()
             self._rise = 0.0
@@ -255,7 +304,10 @@ class ClimbFsm(Node):
             'requested': self._requested,
             'rise': round(self._rise, 3),
             'elapsed': round(self._elapsed(), 2),
+            'direction': self._direction,
+            'descent_enabled': self.allow_descent,
             'contact_evidence_s': round(self._contact.evidence_s, 2),
+            'edge_creep_m': round(self._edge.travelled, 3),
             'last_result': self._last_result,
         })
         self.state_pub.publish(s)
@@ -264,8 +316,10 @@ class ClimbFsm(Node):
         """Return (transmission_mode, cmd_vel) for this cycle."""
         t = self.terrain
         riser_ahead = bool(t.get('riser_ahead'))
+        cliff_ahead = bool(t.get('cliff_ahead'))
         skew = t.get('skew')
         pitch = abs(t.get('pitch', 0.0))
+        descending = self._direction == DIRECTION_DOWN
 
         if self.state == State.IDLE:
             self._riser_streak = self._riser_streak + 1 if riser_ahead else 0
@@ -274,6 +328,28 @@ class ClimbFsm(Node):
                 and self._riser_streak >= self.entry_cycles
                 and self._passthrough.linear.x > 0.02)
             if triggered:
+                # Which way we are going is read from the terrain, not from the
+                # request: a riser ahead means up, a drop means down.
+                if riser_ahead:
+                    self._direction = DIRECTION_UP
+                elif cliff_ahead:
+                    if not self.allow_descent:
+                        self._last_result = (
+                            'refused: a stair descent was requested but '
+                            'allow_descent is off. Descent is dead-reckoned '
+                            'over the last few centimetres and has not been '
+                            'validated on this platform; enable it knowingly.')
+                        self.get_logger().warn(self._last_result)
+                        self._requested = False
+                        return MODE_ROLLING, Twist()
+                    self._direction = DIRECTION_DOWN
+                else:
+                    self._last_result = (
+                        'refused: neither a mountable riser nor a drop is '
+                        'ahead, so there is no staircase here to use')
+                    self.get_logger().warn(self._last_result)
+                    self._requested = False
+                    return MODE_ROLLING, Twist()
                 self._enter(State.ALIGN)
                 return MODE_ROLLING, Twist()
             # Normal driving: hand navigation's command straight through.
@@ -298,35 +374,53 @@ class ClimbFsm(Node):
             return MODE_ROLLING, cmd
 
         if self.state == State.APPROACH:
-            # Feed the stall detector before any early return, so evidence is
-            # not lost on the cycle that would otherwise have confirmed it.
-            in_contact = self._contact.update(
-                self._commanded_v, travelled, 1.0 / self.rate, riser_ahead)
+            # Feed the detectors before any early return, so evidence is not
+            # lost on the cycle that would otherwise have confirmed it.
+            if descending:
+                ready = self._edge.update(travelled, cliff_ahead)
+                feature_present = cliff_ahead
+            else:
+                ready = self._contact.update(
+                    self._commanded_v, travelled, 1.0 / self.rate, riser_ahead)
+                feature_present = riser_ahead
 
             if self._elapsed() > self.approach_timeout:
                 self._abort(
-                    'drove at the riser for '
-                    f'{self.approach_timeout:.0f} s without the wheels ever '
-                    'stalling against it, so the clusters are probably not '
-                    'reaching the step')
+                    f'approached the {"edge" if descending else "riser"} for '
+                    f'{self.approach_timeout:.0f} s without reaching it'
+                    if descending else
+                    f'drove at the riser for {self.approach_timeout:.0f} s '
+                    f'without the wheels ever stalling against it, so the '
+                    f'clusters are probably not reaching the step')
                 return MODE_STOPPED, Twist()
 
-            if not riser_ahead and self._elapsed() > 2.0:
-                # The riser disappeared: it was a chair leg or a passing person.
-                self._last_result = 'no riser found'
+            if not feature_present and self._elapsed() > 2.0:
+                # It was a chair leg, a passing person, or a dark patch of floor.
+                self._last_result = (
+                    'the drop is no longer visible' if descending
+                    else 'no riser found')
                 self._requested = False
                 self._enter(State.IDLE)
                 return MODE_ROLLING, Twist()
 
-            # Contact is the stall. Pitch is kept as a secondary trigger for the
-            # case where the platform does ride partway up a shallow nosing, but
-            # it must never be the only one.
-            if in_contact or pitch > 0.08:
+            if descending:
+                # No contact event exists going down, so the only trigger is the
+                # measured creep. Pitch is deliberately NOT a fallback here: by
+                # the time the chassis pitches over an edge it is already
+                # committed, and reacting then is too late.
+                if ready:
+                    self._enter(State.CLIMB)
+                    return MODE_TUMBLING, Twist()
+            elif ready or pitch > 0.08:
+                # Contact is the stall. Pitch is kept as a secondary trigger for
+                # the case where the platform does ride partway up a shallow
+                # nosing, but it must never be the only one.
                 self._enter(State.CLIMB)
                 return MODE_TUMBLING, Twist()
 
             cmd = Twist()
-            cmd.linear.x = self.approach_speed
+            cmd.linear.x = (self.descent_speed if descending
+                            else self.approach_speed)
             if skew is not None:
                 cmd.angular.z = _clamp(self.align_gain * skew, self.max_align_yaw)
             return MODE_ROLLING, cmd
@@ -341,7 +435,8 @@ class ClimbFsm(Node):
 
             level = pitch < 0.06
             self._level_streak = self._level_streak + 1 if level else 0
-            if self._level_streak >= self.exit_cycles and not riser_ahead:
+            feature_remaining = cliff_ahead if descending else riser_ahead
+            if self._level_streak >= self.exit_cycles and not feature_remaining:
                 self._last_result = f'reached landing after {self._rise:+.2f} m rise'
                 self._requested = False
                 self._level_streak = 0
@@ -349,7 +444,7 @@ class ClimbFsm(Node):
                 return MODE_ROLLING, Twist()
 
             cmd = Twist()
-            cmd.linear.x = self.climb_speed
+            cmd.linear.x = self.descent_speed if descending else self.climb_speed
             if skew is not None:
                 cmd.angular.z = _clamp(self.align_gain * 0.6 * skew, self.max_align_yaw)
             return MODE_TUMBLING, cmd

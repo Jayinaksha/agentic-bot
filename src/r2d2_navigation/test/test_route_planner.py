@@ -198,3 +198,40 @@ def test_graph_round_trips_from_floor_manager_payload():
     assert graph.is_mapped(0) and not graph.is_mapped(1)
     with pytest.raises(RouteError, match='never been mapped'):
         find_floor_path(graph, 0, 1)
+
+
+# ------------------------------------------------------------ descent marking
+#
+# The locomotion layer refuses to descend unless explicitly enabled, so a route
+# has to say which legs go down. Finding out at the top of a flight is worse
+# than finding out before setting off.
+
+def test_an_upward_route_does_not_descend():
+    from r2d2_navigation.route_planner import route_descends
+    assert not route_descends(plan_route(two_storey(), 0, 1, 2.0, 5.4))
+
+
+def test_a_downward_route_is_marked():
+    from r2d2_navigation.route_planner import route_descends
+    legs = plan_route(two_storey(), 1, 0, 2.0, 4.8)
+    assert route_descends(legs)
+    climb = next(leg for leg in legs if leg.kind == LEG_CLIMB)
+    assert climb.descending
+    assert 'descend' in climb.description
+
+
+def test_a_same_floor_route_never_descends():
+    from r2d2_navigation.route_planner import route_descends
+    assert not route_descends(plan_route(two_storey(), 0, 0, 7.4, 3.2))
+
+
+def test_a_mixed_route_is_marked_if_any_leg_descends():
+    """Two flights up then one down still needs descent enabled."""
+    from r2d2_navigation.route_planner import route_descends
+    assert route_descends(plan_route(three_storey(), 2, 0, 1.0, 1.0))
+
+
+def test_the_descending_flag_survives_serialisation():
+    legs = plan_route(two_storey(), 1, 0, 2.0, 4.8)
+    climb = next(leg for leg in legs if leg.kind == LEG_CLIMB)
+    assert climb.as_dict()['descending'] is True

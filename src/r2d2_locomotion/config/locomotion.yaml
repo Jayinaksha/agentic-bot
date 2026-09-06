@@ -82,3 +82,23 @@ climb_fsm:
     max_align_yaw: 0.35           # rad/s
     climb_timeout: 90.0           # s, abort and back off
     stall_travel_epsilon: 0.02    # m of IMU-integrated rise per 2 s to count as progress
+
+    # --- descent ---
+    # OFF by default, and deliberately so. Going up, the riser stops the robot
+    # and the stall is an unambiguous "you are here". Going down there is no
+    # such event: the beams see the drop while the wheels are still on solid
+    # floor, so the last few centimetres are dead-reckoned. It has not been
+    # validated on hardware or in simulation, and getting it wrong means the
+    # robot falls down a flight of stairs. Turn it on knowingly.
+    allow_descent: false
+    descent_speed: 0.07           # m/s, both the creep and the tumble
+    descent_margin: 0.05          # m short of the edge to start tumbling
+    edge_confirm_cycles: 4        # cycles of consistent cliff before measuring
+
+    # ToF geometry, mirrored from terrain_monitor. The creep distance is
+    # (tof_forward_offset + tof_spot_ahead) - wheelbase/2 - descent_margin,
+    # i.e. how far the front clusters are from the edge when the beam first
+    # sees it. Every term is measurable with a tape on the real robot.
+    tof_forward_offset: 0.180
+    tof_spot_ahead: 0.290
+    wheelbase: 0.260

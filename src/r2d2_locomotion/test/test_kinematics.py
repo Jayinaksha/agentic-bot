@@ -20,7 +20,9 @@ from r2d2_locomotion.kinematics import (  # noqa: E402
     RISER, UNKNOWN, URDF_PHASES, body_twist, carrier_hold_velocity,
     carrier_rest_phase, classify_delta, clamp, climb_envelope, flat_return,
     ground_spot_distance, height_delta, integrate_arc, joint_commands,
-    RiserContact, rate_limit, side_speeds, wrap_angle, wrap_to_period)
+    DIRECTION_DOWN, DIRECTION_UP, EdgeApproach, RiserContact,
+    descent_creep_distance, descent_is_geometrically_safe, rate_limit,
+    side_speeds, wrap_angle, wrap_to_period)
 
 # Platform constants, mirroring r2d2_description/config/robot_params.yaml.
 R_SUB = 0.050
@@ -536,3 +538,122 @@ def test_the_pitch_only_trigger_would_never_have_fired():
             break
         elapsed += CONTACT_DT
     assert elapsed < 1.0, 'contact must be confirmed long before the timeout'
+
+
+# ---------------------------------------------------------- stair descent
+#
+# Descent is the dangerous direction. Going up, the riser stops the robot and
+# the stall says "you are here". Going down there is no such event - a robot
+# that keeps rolling drives off the top step - so the last stretch is
+# dead-reckoned from geometry, and these tests cover that geometry.
+
+def test_creep_distance_matches_the_sensor_geometry():
+    """Beam lands 0.47 m ahead of base_link, front contact is 0.13 m ahead, so
+    the gap is 0.34 m; stop 0.05 m short of it."""
+    creep = descent_creep_distance(tof_forward_offset=0.180, spot_ahead=0.290,
+                                   wheelbase=0.260, margin=0.05)
+    assert creep == pytest.approx(0.290)
+    assert descent_is_geometrically_safe(creep)
+
+
+def test_a_bigger_margin_commits_earlier():
+    near = descent_creep_distance(0.180, 0.290, 0.260, margin=0.05)
+    early = descent_creep_distance(0.180, 0.290, 0.260, margin=0.15)
+    assert early < near
+
+
+def test_a_robot_that_cannot_see_the_edge_in_time_is_refused():
+    """A long wheelbase with a short lookahead puts the beam behind the front
+    wheels: there is no warning to act on, so descent must be refused."""
+    creep = descent_creep_distance(tof_forward_offset=0.05, spot_ahead=0.05,
+                                   wheelbase=0.60)
+    assert creep < 0
+    assert not descent_is_geometrically_safe(creep)
+
+
+def test_edge_approach_waits_for_a_consistent_cliff():
+    """One frame of dark floor reads the same as a void."""
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    for _ in range(3):
+        assert not edge.update(0.01, cliff_ahead=True)
+    assert not edge.armed
+
+
+def test_edge_approach_measures_only_after_arming():
+    """Travel before the cliff is confirmed must not count towards the creep,
+    or the robot commits early and tumbles into thin air."""
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    for _ in range(4):
+        edge.update(0.50, cliff_ahead=True)
+    assert edge.armed
+    assert edge.travelled == pytest.approx(0.0)
+
+
+def test_edge_approach_fires_after_the_creep_distance():
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    for _ in range(4):
+        assert not edge.update(0.0, cliff_ahead=True)
+    fired = False
+    travelled = 0.0
+    for _ in range(200):
+        travelled += 0.005
+        if edge.update(0.005, cliff_ahead=True):
+            fired = True
+            break
+    assert fired
+    assert travelled == pytest.approx(0.29, abs=0.01)
+
+
+def test_edge_approach_does_not_fire_early():
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    for _ in range(4):
+        edge.update(0.0, cliff_ahead=True)
+    for _ in range(40):                       # 40 * 0.005 = 0.20 m, short of 0.29
+        assert not edge.update(0.005, cliff_ahead=True)
+
+
+def test_losing_the_cliff_discards_the_measurement():
+    """A drop that stops being visible was a misreading or the robot turned
+    away. Committing on a stale measurement is how a robot falls downstairs."""
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    for _ in range(4):
+        edge.update(0.0, cliff_ahead=True)
+    for _ in range(40):
+        edge.update(0.005, cliff_ahead=True)
+    assert edge.travelled > 0.0
+
+    edge.update(0.005, cliff_ahead=False)
+    assert not edge.armed
+    assert edge.travelled == pytest.approx(0.0)
+
+
+def test_the_measurement_restarts_cleanly_after_a_dropout():
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    for _ in range(4):
+        edge.update(0.0, cliff_ahead=True)
+    for _ in range(30):
+        edge.update(0.005, cliff_ahead=True)
+    edge.update(0.005, cliff_ahead=False)
+
+    for _ in range(4):
+        assert not edge.update(0.0, cliff_ahead=True)
+    fired = sum(1 for _ in range(200) if edge.update(0.005, cliff_ahead=True))
+    assert fired > 0
+
+
+def test_no_cliff_means_no_descent_ever():
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    assert not any(edge.update(0.05, cliff_ahead=False) for _ in range(200))
+
+
+def test_reset_clears_the_edge_approach():
+    edge = EdgeApproach(creep_distance=0.29, confirm_cycles=4)
+    for _ in range(10):
+        edge.update(0.01, cliff_ahead=True)
+    edge.reset()
+    assert not edge.armed
+    assert edge.travelled == pytest.approx(0.0)
+
+
+def test_the_two_directions_are_distinct_constants():
+    assert DIRECTION_UP != DIRECTION_DOWN

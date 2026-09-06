@@ -338,3 +338,98 @@ class RiserContact:
     @property
     def evidence_s(self) -> float:
         return self._evidence_s
+
+
+# ------------------------------------------------------------ stair descent
+#
+# Descent is not ascent run backwards, and it is the more dangerous direction.
+#
+# Going up, the riser stops the robot and the stall says "you are here". Going
+# down there is nothing to stop it: the ToF beams see the drop while the wheels
+# are still on solid floor, and if the platform keeps rolling it drives off the
+# top step. There is no contact event to wait for.
+#
+# So descent is dead-reckoned over a short, measured creep. The beam spot sits a
+# known distance ahead of the front cluster contact, wheel odometry is valid in
+# rolling mode, and the robot creeps exactly that far minus a margin before
+# committing to a tumble. Every term below is a length that can be measured on
+# the real robot with a tape, which is the point: nothing here depends on a
+# threshold that has to be tuned by trial on a staircase.
+
+DIRECTION_UP = 'up'
+DIRECTION_DOWN = 'down'
+
+
+def descent_creep_distance(tof_forward_offset: float, spot_ahead: float,
+                           wheelbase: float, margin: float = 0.05) -> float:
+    """How far to creep after first seeing the drop, before tumbling.
+
+    The ToF beam meets the floor `tof_forward_offset + spot_ahead` ahead of
+    base_link. The front cluster's contact patch is `wheelbase / 2` ahead of
+    base_link. The gap between them is how far the robot must travel for its
+    front clusters to arrive at the edge, and `margin` stops it short so the
+    tumble begins with the clusters still fully supported.
+
+    A negative result means the beam lands behind the front contact patch: the
+    robot cannot see the edge before its wheels reach it, and must not descend.
+    """
+    return (tof_forward_offset + spot_ahead) - (wheelbase / 2.0) - margin
+
+
+def descent_is_geometrically_safe(creep_distance: float) -> bool:
+    """Whether the sensor geometry gives any warning at all before the edge."""
+    return creep_distance > 0.0
+
+
+class EdgeApproach:
+    """Measured creep towards a stair edge.
+
+    Tracks distance travelled since the drop was first confirmed, and reports
+    when the platform has closed the gap. Loses its baseline if the cliff
+    reading disappears, because a drop that stops being visible was either a
+    misreading or the robot has turned away from it - either way, committing to
+    a tumble on a stale measurement is how a robot falls down stairs.
+    """
+
+    __slots__ = ('creep_distance', 'confirm_cycles', '_travelled',
+                 '_confirmed', '_armed')
+
+    def __init__(self, creep_distance: float, confirm_cycles: int = 4):
+        self.creep_distance = creep_distance
+        self.confirm_cycles = confirm_cycles
+        self._travelled = 0.0
+        self._confirmed = 0
+        self._armed = False
+
+    def reset(self) -> None:
+        self._travelled = 0.0
+        self._confirmed = 0
+        self._armed = False
+
+    def update(self, travelled_m: float, cliff_ahead: bool) -> bool:
+        """Feed one cycle. Returns True when it is time to start descending."""
+        if not cliff_ahead:
+            self.reset()
+            return False
+
+        self._confirmed += 1
+        if self._confirmed < self.confirm_cycles:
+            # Wait for the drop to be consistently visible before starting to
+            # measure; one frame of a dark floor reads the same as a void.
+            return False
+
+        if not self._armed:
+            self._armed = True
+            self._travelled = 0.0
+            return False
+
+        self._travelled += abs(travelled_m)
+        return self._travelled >= self.creep_distance
+
+    @property
+    def travelled(self) -> float:
+        return self._travelled
+
+    @property
+    def armed(self) -> bool:
+        return self._armed

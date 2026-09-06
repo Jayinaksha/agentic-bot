@@ -460,7 +460,9 @@ async def _execute_route(bridge, target_floor: int, x: float, y: float,
     model never has to sequence a staircase by hand.
     """
     from r2d2_navigation.route_planner import (LEG_CLIMB, LEG_DRIVE, RouteError,
-                                               graph_from_payload, plan_route)
+                                               describe_route,
+                                               graph_from_payload, plan_route,
+                                               route_descends)
 
     if not bridge.floor_graph:
         return {'success': False,
@@ -473,6 +475,19 @@ async def _execute_route(bridge, target_floor: int, x: float, y: float,
                           goal_description=description)
     except RouteError as exc:
         return {'success': False, 'reason': str(exc)}
+
+    # Check this before setting off, not on arrival at the top of a flight.
+    if route_descends(legs) and not bridge.climb.get('descent_enabled', False):
+        return {
+            'success': False,
+            'reason': ('this route needs the robot to go DOWN a staircase, '
+                       'which the locomotion layer refuses by default. Descent '
+                       'is dead-reckoned over the last few centimetres and has '
+                       'not been validated on this platform. Enable it with '
+                       'allow_descent in r2d2_locomotion/config/locomotion.yaml '
+                       'if you accept that. Nothing has moved.'),
+            'route': describe_route(legs),
+        }
 
     completed = []
     for index, leg in enumerate(legs):

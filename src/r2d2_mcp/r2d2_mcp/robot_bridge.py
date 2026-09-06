@@ -261,11 +261,17 @@ class RobotBridge:
                     'reason': f'the climb did not finish within {timeout_s:.0f} s'}
 
         if not entered:
+            # The FSM records why it declined; pass that through rather than
+            # guessing, since "no staircase here" and "descent is disabled" call
+            # for completely different responses.
+            declined = self.climb.get('last_result', '')
+            if declined.startswith('refused'):
+                return {'success': False, 'reason': declined}
             return {'success': False,
                     'reason': ('the climb never started: the terrain monitor '
-                               'did not see a mountable riser ahead. Drive to '
-                               'the foot of the stairs and face them squarely '
-                               'first.')}
+                               'saw neither a mountable riser nor a drop ahead. '
+                               'Drive to the foot of the stairs and face them '
+                               'squarely first.')}
 
         result = self.climb.get('last_result', '')
         rise = self.climb.get('rise', 0.0)
@@ -365,6 +371,8 @@ class RobotBridge:
             },
             'locomotion': {
                 'climb_state': self.climb.get('state', 'idle'),
+                'climb_direction': self.climb.get('direction'),
+                'descent_enabled': self.climb.get('descent_enabled', False),
                 'last_climb_result': self.climb.get('last_result'),
             },
             'last_view': {

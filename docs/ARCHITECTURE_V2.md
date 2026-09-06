@@ -97,6 +97,42 @@ position rather than chosen.
 
 This was caught by `scripts/analyse_climb.py`, not by inspection.
 
+### Going back down
+
+Descent is not ascent reversed, and until it was implemented the robot could go
+upstairs and **never come back down** — the FSM only looked for risers, so on a
+landing it reported "no riser found" and aborted, while the route planner
+cheerfully emitted descend legs it could not execute.
+
+The asymmetry is physical. Going up, the riser stops the platform and the stall
+is an unambiguous *you are here*. Going down there is no such event: the ToF
+beams see the drop while the wheels are still on solid floor, and a robot that
+keeps rolling drives off the top step. So the last stretch is dead-reckoned from
+geometry:
+
+```
+creep = (tof_forward_offset + spot_ahead) − wheelbase/2 − margin
+      = (0.180 + 0.290) − 0.130 − 0.05
+      = 0.290 m
+```
+
+Every term is measurable with a tape on the real robot. `EdgeApproach` waits for
+the drop to be consistently visible, then measures exactly that far on wheel
+odometry before committing to a tumble — and discards the measurement entirely
+if the cliff stops being visible, because committing on a stale reading is how a
+robot falls down a flight of stairs. Body pitch is deliberately *not* a fallback
+here: by the time the chassis pitches over an edge it is already committed.
+
+The geometry is checked at startup. A platform whose beams land behind its front
+contact patch gets no warning at all before the edge, and descent is refused
+outright.
+
+**Descent is off by default** (`allow_descent`). It has not been validated on
+hardware or in simulation, and the failure mode is the robot falling downstairs.
+With it off, the FSM refuses explicitly and the MCP layer checks the whole route
+*before* setting off, so you learn about it in the kitchen rather than on the
+landing.
+
 ### Detecting contact with a riser
 
 The phase hold has a consequence that is easy to miss and fatal if missed. With
@@ -381,12 +417,12 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 
 ### Verified here
 
-- **217 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
+- **233 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
 
   | Suite | Tests | Covers |
   |---|---|---|
-  | `r2d2_locomotion` | 59 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, riser contact detection, arc odometry, ToF geometry, climb envelope |
-  | `r2d2_navigation` | 44 | TLS line fitting, doorway detection, docking sign conventions, cross-floor routing |
+  | `r2d2_locomotion` | 70 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, riser contact detection, arc odometry, ToF geometry, climb envelope |
+  | `r2d2_navigation` | 49 | TLS line fitting, doorway detection, docking sign conventions, cross-floor routing, descent marking |
   | `r2d2_memory` | 28 | Hash-chain tamper detection, merge radius, position fusion, embeddings |
   | `r2d2_perception` | 44 | Pixel→bearing, median ranging, world projection, VLA response parsing |
   | `r2d2_mcp` | 42 | Tool-call parsing, agent loop, failure paths, dry run |
@@ -394,7 +430,9 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 - `scripts/analyse_climb.py` — quasi-static analysis of reach, tread fit, gait
   match, tipping, torque, climb duration and ride height. **This found two real
   bugs**: the zero-velocity carrier hold, and — following from it — a mount
-  trigger that could never have fired, both described above. Two warnings stand
+  trigger that could never have fired. The same analytical pass found a third:
+  descent was entirely unimplemented while the route planner emitted descend
+  legs. All three are described above. Two warnings stand
   deliberately (see below).
 - All Python compiles; all XML/YAML/SDF parses; every `setup.py` entry point
   resolves to a real module; every referenced script exists.

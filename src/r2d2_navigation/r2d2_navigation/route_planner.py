@@ -36,6 +36,11 @@ class Leg:
     kind: str                       # LEG_DRIVE | LEG_CLIMB | LEG_DOCK
     floor: int
     description: str
+    # Set on LEG_CLIMB. Descent is a materially different and more dangerous
+    # manoeuvre than ascent, and the locomotion layer refuses it unless
+    # allow_descent is set, so callers need to see which one a route contains
+    # rather than discovering it when the leg fails.
+    descending: bool = False
     x: Optional[float] = None
     y: Optional[float] = None
     yaw: float = 0.0
@@ -50,7 +55,8 @@ class Leg:
             out.update({'x': self.x, 'y': self.y, 'yaw': self.yaw})
         if self.kind == LEG_CLIMB:
             out.update({'x': self.x, 'y': self.y, 'yaw': self.yaw,
-                        'to_floor': self.to_floor})
+                        'to_floor': self.to_floor,
+                        'descending': self.descending})
         if self.kind == LEG_DOCK:
             out.update({'target': self.dock_target, 'bearing': self.dock_bearing})
         return out
@@ -166,10 +172,12 @@ def plan_route(graph: FloorGraph, current_floor: int, goal_floor: int,
             x=t.foot[0], y=t.foot[1], yaw=t.heading,
             description=f'drive to the foot of the {t.kind} on floor {floor}',
         ))
+        descending = t.to_floor < floor
         legs.append(Leg(
             kind=LEG_CLIMB, floor=floor, to_floor=t.to_floor,
             x=t.head[0], y=t.head[1], yaw=t.heading,
-            description=(f'{"climb" if t.to_floor > floor else "descend"} the '
+            descending=descending,
+            description=(f'{"descend" if descending else "climb"} the '
                          f'{t.kind} from floor {floor} to floor {t.to_floor}'),
         ))
         floor = t.to_floor
@@ -195,6 +203,16 @@ def describe_route(legs: Sequence[Leg]) -> str:
     if not legs:
         return 'already at the goal'
     return '\n'.join(f'{i + 1}. {leg.description}' for i, leg in enumerate(legs))
+
+
+def route_descends(legs: Sequence[Leg]) -> bool:
+    """Whether a route asks the robot to go down a staircase.
+
+    Callers check this before executing: the locomotion layer refuses descent
+    unless it has been explicitly enabled, and finding that out at the top of a
+    flight is worse than finding it out before setting off.
+    """
+    return any(leg.kind == LEG_CLIMB and leg.descending for leg in legs)
 
 
 def graph_from_payload(payload: Dict) -> FloorGraph:
