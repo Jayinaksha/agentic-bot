@@ -104,6 +104,12 @@ jobs:
       # spot, so it needs its own length plus turning room clear of the bottom
       # step, and the transition poses must not sit on the flight or in the
       # stairwell opening.
+      # The robot must fit through the house it is asked to navigate. This is
+      # the same arithmetic that caught a staircase with 0.20 m of approach room
+      # for a 0.36 m robot, applied to the doorways and the costmap tuning.
+      - name: the robot fits through its own doorways
+        run: python scripts/check_clearances.py
+
       - name: staircase is approachable and its poses are on solid floor
         run: |
           python - <<'EOF'

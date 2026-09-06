@@ -210,9 +210,16 @@ global_costmap:
         enabled: true
         filter_info_topic: "/costmap_filter_info"
 
+      # Sized against the doorways, not picked by feel. At 0.45 m the inflation
+      # from both jambs met in the middle of a 0.90 m door and no zero-cost lane
+      # survived anywhere in the house: routes still existed, since inflation is
+      # not lethal, but every threshold was high-cost, so the cost-regulated
+      # controller crawled at each one and the planner detoured around doors
+      # whenever it could. 0.35 m still exceeds the 0.26 m robot radius and
+      # leaves a 0.20 m clear lane. Checked by scripts/check_clearances.py.
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.45
+        inflation_radius: 0.35
         cost_scaling_factor: 3.0
 
 local_costmap:

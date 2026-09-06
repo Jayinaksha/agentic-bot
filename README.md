@@ -99,6 +99,7 @@ Three helper scripts, all of which are worth running before the simulator:
 ```bash
 python3 scripts/analyse_climb.py     # can this platform climb these stairs?
 python3 scripts/check_params.py      # YAML vs nodes, and constant drift
+python3 scripts/check_clearances.py  # does the robot fit through its own doors?
 python3 scripts/check_ci.py          # run the whole CI locally before pushing
 python3 scripts/calibrate_slip.py    # measure yaw_slip_factor (needs ROS)
 python3 scripts/check_memory.py      # ledger + pgvector against real backends

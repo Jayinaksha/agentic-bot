@@ -458,6 +458,11 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
   `tof_mount_height` from the axle height, `tof_spot_ahead` from the mount
   geometry, `axle_height` from the carrier straddle position. Two of the bugs
   below were duplicated constants drifting apart, so this is now enforced.
+- `scripts/check_clearances.py` — checks the robot actually fits the house:
+  footprint radius against the body diagonal, doorway lane width, that margin
+  against realistic path-following pose error, whether a zero-cost lane survives
+  the costmap inflation, and hallway turning circle. It found that a 0.45 m
+  inflation radius met in the middle of every 0.90 m doorway.
 - `scripts/check_ci.py` — runs the whole workflow locally, so a broken CI step
   is found before a push rather than after one.
 - All of the above runs in CI (`.github/workflows/tests.yml`) on every push,
@@ -476,6 +481,7 @@ compared, or a number computed.
 | "Foot of stairs" pose on the first step | Climb starts already standing on the flight | Generated vs. hand-typed coordinates |
 | 0.20 m of approach clearance | A 0.36 m robot cannot square up to the flight | Same comparison |
 | Contact detector 4× slow | Would have missed its own confirmation window | Tracing the detector by hand |
+| Inflation covered the whole doorway | No zero-cost lane through any door in the house: the controller crawls at every threshold and the planner detours around doors | `check_clearances.py` |
 
 ### Known warnings, accepted deliberately
 
