@@ -173,11 +173,23 @@ jobs:
         run: |
           python - <<'EOF'
           import asyncio, sys
+
+          # Import the SDK explicitly first. server.py degrades gracefully when
+          # it is absent - mcp becomes None - so without this the step fails
+          # with an opaque AttributeError instead of saying the install did not
+          # take.
+          import mcp  # noqa: F401
+
           import r2d2_mcp.server as server
           from r2d2_mcp.llm import mcp_tools_to_openai
 
           # Tools that genuinely take no arguments.
           NO_ARGS = {'get_state', 'climb_stairs', 'stop', 'reset_safety_stop'}
+
+          if server.mcp is None:
+              print('::error::the MCP SDK imported but the server did not '
+                    'construct; its API has probably changed again')
+              sys.exit(1)
 
           async def main():
               tools = await server.mcp.list_tools()

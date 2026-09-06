@@ -471,7 +471,10 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 - `scripts/check_nav2_plugins.py` — plugin naming style against the target distro.
 - `scripts/check_sql.py` — the memory layer's queries against its own schema.
 - `scripts/check_ci.py` — runs the whole workflow locally, so a broken CI step
-  is found before a push rather than after one.
+  is found before a push rather than after one. It honours each step's `env`
+  block, strips dependency installs rather than skipping whole steps, and
+  reports a step that fails on a dependency CI would have installed as
+  *skipped* rather than failed — a tool that cries wolf trains you to ignore it.
 - All of the above runs in CI (`.github/workflows/tests.yml`) on every push,
   across Python 3.10 (Humble) and 3.12 (Jazzy).
 
