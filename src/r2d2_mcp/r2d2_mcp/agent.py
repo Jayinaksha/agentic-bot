@@ -233,10 +233,16 @@ def _assistant_message(turn: Turn) -> Dict[str, Any]:
 
 
 def _unpack(response) -> Dict[str, Any]:
-    """MCP call result to a plain dict."""
-    structured = getattr(response, 'structuredContent', None)
-    if isinstance(structured, dict):
-        return structured
+    """MCP call result to a plain dict.
+
+    The SDK renamed `structuredContent` to `structured_content` in 2.0. Reading
+    only the old name silently falls through to re-parsing the text content,
+    which mostly works and occasionally does not - so both are tried.
+    """
+    for attribute in ('structured_content', 'structuredContent'):
+        structured = getattr(response, attribute, None)
+        if isinstance(structured, dict):
+            return structured
 
     parts = []
     for item in getattr(response, 'content', []) or []:

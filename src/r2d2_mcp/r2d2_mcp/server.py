@@ -47,10 +47,20 @@ import math
 import sys
 from typing import Any, Dict, List, Optional
 
+# The MCP Python SDK renamed FastMCP to MCPServer in 2.0 and dropped the
+# mcp.server.fastmcp module entirely, so importing the old name fails outright
+# on a current `pip install mcp`. Both generations are supported here because
+# either may be pinned in a given environment; the decorators are identical, so
+# only the class name and the HTTP transport wiring actually differ.
+_SDK_MAJOR = 2
 try:
-    from mcp.server.fastmcp import FastMCP
-except ImportError:  # pragma: no cover
-    FastMCP = None
+    from mcp.server.mcpserver import MCPServer as _McpServer   # SDK 2.x
+except ImportError:  # pragma: no cover - exercised on SDK 1.x
+    try:
+        from mcp.server.fastmcp import FastMCP as _McpServer   # SDK 1.x
+        _SDK_MAJOR = 1
+    except ImportError:
+        _McpServer = None
 
 from r2d2_mcp.config import RobotConfig, ServerConfig
 
@@ -58,7 +68,7 @@ log = logging.getLogger('r2d2.mcp')
 
 # ROS, memory and routing are imported lazily inside _startup() and the tools
 # that need them, so this module still imports on a machine with no ROS.
-mcp = FastMCP('r2d2-robot') if FastMCP is not None else None
+mcp = _McpServer('r2d2-robot') if _McpServer is not None else None
 
 _bridge = None
 _store = None
@@ -554,20 +564,30 @@ def main() -> int:
         stream=sys.stderr,
         format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 
-    if FastMCP is None:
-        print('The MCP SDK is not installed. pip install "mcp[cli]"',
+    if _McpServer is None:
+        print('The MCP SDK is not installed, or its API has changed again.\n'
+              'Install it with:  pip install "mcp>=2,<3"\n'
+              'This server supports SDK 1.x and 2.x; a newer major version may '
+              'need the import at the top of this file updating.',
               file=sys.stderr)
         return 1
 
     server_config = ServerConfig()
     asyncio.run(_startup())
 
-    log.info('serving the robot over %s transport', server_config.transport)
+    log.info('serving the robot over %s transport (MCP SDK %d.x)',
+             server_config.transport, _SDK_MAJOR)
 
     if server_config.transport == 'http':
-        mcp.settings.host = server_config.host
-        mcp.settings.port = server_config.port
-        mcp.run(transport='streamable-http')
+        # 2.x takes host and port as run kwargs; 1.x carried them on a settings
+        # object that 2.x no longer has.
+        if _SDK_MAJOR >= 2:
+            mcp.run(transport='streamable-http',
+                    host=server_config.host, port=server_config.port)
+        else:  # pragma: no cover - SDK 1.x
+            mcp.settings.host = server_config.host
+            mcp.settings.port = server_config.port
+            mcp.run(transport='streamable-http')
     else:
         mcp.run(transport='stdio')
     return 0

@@ -204,9 +204,19 @@ def test_assistant_message_is_rebuilt_for_recovered_calls():
         message['tool_calls'][0]['function']['arguments']) == {'q': 'x'}
 
 
-def test_unpack_prefers_structured_content():
+def test_unpack_prefers_structured_content_sdk_1():
     class _R:
         structuredContent = {'success': True, 'floor': 2}
+        content = []
+    assert _unpack(_R()) == {'success': True, 'floor': 2}
+
+
+def test_unpack_prefers_structured_content_sdk_2():
+    """SDK 2.0 renamed structuredContent to structured_content. Reading only the
+    old name falls through to re-parsing the text content, which mostly works
+    and occasionally does not."""
+    class _R:
+        structured_content = {'success': True, 'floor': 2}
         content = []
     assert _unpack(_R()) == {'success': True, 'floor': 2}
 

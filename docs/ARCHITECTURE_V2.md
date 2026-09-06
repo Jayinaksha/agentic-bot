@@ -427,7 +427,7 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 
 ### Verified here
 
-- **255 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
+- **262 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
 
   | Suite | Tests | Covers |
   |---|---|---|
@@ -484,6 +484,8 @@ compared, or a number computed.
 | Contact detector 4× slow | Would have missed its own confirmation window | Tracing the detector by hand |
 | Inflation covered the whole doorway | No zero-cost lane through any door in the house: the controller crawls at every threshold and the planner detours around doors | `check_clearances.py` |
 | A doorway placed off its wall lengthened it | A door mistyped at x=99 produced a 98 m wall across the map instead of a 9 m one, silently | Falsifying the reachability test |
+| MCP server written against SDK 1.x | `pip install mcp` now resolves to 2.x, where `FastMCP` no longer exists — the server would not import at all | Installing the SDK and loading it |
+| `Tool.inputSchema` renamed in SDK 2.0 | All 15 tools advertised to the model as taking **no arguments** — every call arrives empty, with nothing in any log to say why | The same |
 
 ### Known warnings, accepted deliberately
 
@@ -507,6 +509,10 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   changed between Humble and Jazzy.
 - **No model endpoint has been called.** The prompt and response handling are
   written against Cosmos Reason 2's documented output shape.
+- The MCP server *has* now been loaded against the real SDK: all 15 tools
+  register and convert to chat-API definitions with their schemas intact, and
+  CI re-checks that on every push. What has not been exercised is a live tool
+  call, which needs the ROS bridge underneath it.
 - **The Postgres schema has never been applied**, and the ivfflat `lists=100`
   is a starting guess.
 

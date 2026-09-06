@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from r2d2_mcp.llm import (  # noqa: E402
     Turn, _json_objects, _parse_arguments, _parse_tool_calls,
-    mcp_tools_to_openai)
+    mcp_tools_to_openai, tool_input_schema)
 
 
 def _message(**kwargs):
@@ -157,10 +157,27 @@ def test_stray_closing_brace_does_not_break_later_parsing():
 # ------------------------------------------------------------ tool conversion
 
 class _FakeTool:
+    """An SDK 1.x tool, which spelled the schema field in camelCase."""
+
     def __init__(self, name, description, schema):
         self.name = name
         self.description = description
         self.inputSchema = schema
+
+
+class _FakeToolV2:
+    """An SDK 2.x tool. The field was renamed to input_schema in 2.0.
+
+    Reading only the old name does not raise - it returns None, and the tool is
+    then advertised to the model as taking no arguments. Every call arrives with
+    an empty argument object, the robot is asked to navigate to nowhere, and
+    nothing in any log says why.
+    """
+
+    def __init__(self, name, description, schema):
+        self.name = name
+        self.description = description
+        self.input_schema = schema
 
 
 def test_mcp_tools_convert_to_openai_functions():
@@ -193,3 +210,52 @@ def test_a_turn_with_calls_wants_tools():
 
 def test_a_text_only_turn_does_not():
     assert not Turn(text='All done.').wants_tools
+
+
+# ------------------------------------------------- MCP SDK version skew
+#
+# The MCP Python SDK renamed FastMCP to MCPServer and moved several fields to
+# snake_case in 2.0. A bare `pip install mcp` now resolves to 2.x, so code
+# written against 1.x fails - loudly at import, and silently at the schema.
+
+SCHEMA = {'type': 'object',
+          'properties': {'name': {'type': 'string'}},
+          'required': ['name']}
+
+
+def test_schema_is_read_from_an_sdk_1_tool():
+    assert tool_input_schema(_FakeTool('t', 'd', SCHEMA)) is SCHEMA
+
+
+def test_schema_is_read_from_an_sdk_2_tool():
+    assert tool_input_schema(_FakeToolV2('t', 'd', SCHEMA)) is SCHEMA
+
+
+def test_a_tool_with_neither_field_yields_none():
+    class Bare:
+        name = 't'
+        description = 'd'
+    assert tool_input_schema(Bare()) is None
+
+
+def test_sdk_2_tools_convert_with_their_parameters_intact():
+    """The regression. Reading only `inputSchema` gave every SDK 2.x tool an
+    empty schema, so the model was told navigate_to_room takes no arguments."""
+    converted = mcp_tools_to_openai([
+        _FakeToolV2('navigate_to_room', 'Drive to a named room.', SCHEMA)])
+    assert converted[0]['function']['parameters'] is SCHEMA
+    assert 'name' in converted[0]['function']['parameters']['properties']
+
+
+def test_both_sdk_generations_convert_identically():
+    v1 = mcp_tools_to_openai([_FakeTool('go', 'Go.', SCHEMA)])
+    v2 = mcp_tools_to_openai([_FakeToolV2('go', 'Go.', SCHEMA)])
+    assert v1 == v2
+
+
+def test_a_mixed_listing_converts_completely():
+    converted = mcp_tools_to_openai([
+        _FakeTool('old', 'Old.', SCHEMA),
+        _FakeToolV2('new', 'New.', SCHEMA),
+    ])
+    assert all(c['function']['parameters']['properties'] for c in converted)

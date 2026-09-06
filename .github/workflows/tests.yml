@@ -146,6 +146,55 @@ jobs:
           sys.exit(1 if problems else 0)
           EOF
 
+  # The MCP layer is the one part of this stack with a third-party API that
+  # moves underneath it. The SDK renamed FastMCP to MCPServer and moved several
+  # fields to snake_case in 2.0, which broke the server at import and, more
+  # quietly, stripped the argument schemas off every tool. Installing the real
+  # SDK and loading the server is the only check that catches that.
+  mcp-sdk:
+    name: MCP server loads against the real SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install the MCP SDK
+        run: python -m pip install --upgrade pip "mcp>=2,<3" httpx pyyaml
+
+      - name: the server registers every tool with an intact schema
+        env:
+          PYTHONPATH: src/r2d2_mcp:src/r2d2_memory:src/r2d2_navigation
+        run: |
+          python - <<'EOF'
+          import asyncio, sys
+          import r2d2_mcp.server as server
+          from r2d2_mcp.llm import mcp_tools_to_openai
+
+          # Tools that genuinely take no arguments.
+          NO_ARGS = {'get_state', 'climb_stairs', 'stop', 'reset_safety_stop'}
+
+          async def main():
+              tools = await server.mcp.list_tools()
+              if not tools:
+                  print('::error::the server registered no tools at all')
+                  return 1
+              converted = mcp_tools_to_openai(tools)
+              stripped = [c['function']['name'] for c in converted
+                          if not c['function']['parameters'].get('properties')
+                          and c['function']['name'] not in NO_ARGS]
+              for name in stripped:
+                  print(f'::error::{name} was advertised to the model with no '
+                        f'arguments; its schema was lost in conversion')
+              print(f'{len(tools)} tools registered on MCP SDK '
+                    f'{server._SDK_MAJOR}.x, schemas intact')
+              return 1 if stripped else 0
+
+          sys.exit(asyncio.run(main()))
+          EOF
+
   static:
     name: parse and wiring checks
     runs-on: ubuntu-latest

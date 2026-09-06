@@ -196,6 +196,22 @@ def _json_objects(text: str) -> List[Dict[str, Any]]:
     return out
 
 
+def tool_input_schema(tool: Any) -> Optional[Dict[str, Any]]:
+    """The JSON Schema for a tool's arguments, across MCP SDK generations.
+
+    The SDK renamed this field from `inputSchema` to `input_schema` in 2.0.
+    Reading only the old name does not raise - it quietly returns None, and the
+    tool is then advertised to the model as taking no arguments at all. Every
+    call would arrive with an empty argument object and the robot would be asked
+    to navigate to nowhere, with nothing in any log to say why.
+    """
+    for attribute in ('input_schema', 'inputSchema'):
+        schema = getattr(tool, attribute, None)
+        if schema:
+            return schema
+    return None
+
+
 def mcp_tools_to_openai(tools: List[Any]) -> List[Dict[str, Any]]:
     """Convert an MCP tool listing into OpenAI function-tool definitions.
 
@@ -206,8 +222,8 @@ def mcp_tools_to_openai(tools: List[Any]) -> List[Dict[str, Any]]:
     """
     out = []
     for tool in tools:
-        schema = getattr(tool, 'inputSchema', None) or {'type': 'object',
-                                                        'properties': {}}
+        schema = tool_input_schema(tool) or {'type': 'object',
+                                             'properties': {}}
         out.append({
             'type': 'function',
             'function': {
