@@ -92,6 +92,14 @@ jobs:
           # get a warning and a usable answer, not a crash.
           python scripts/analyse_climb.py --no-urdf
 
+      # A sensor and its bridge entry are joined only by a string typed in two
+      # files. When they disagree nothing complains: the sensor publishes into
+      # the void and the subscriber waits forever. For a ToF beam that means
+      # terrain_monitor holds "unknown", which is neither a cliff nor a riser,
+      # and the robot approaches a staircase seeing nothing.
+      - name: every simulated sensor reaches ROS
+        run: PYTHONPATH=/tmp/stubs python scripts/check_sim_wiring.py
+
       # The world generator refuses to emit stairs the robot cannot mount, so
       # this also proves robot and test world are still in step.
       - name: regenerate the house world

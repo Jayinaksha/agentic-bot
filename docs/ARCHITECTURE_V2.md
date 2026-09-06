@@ -479,6 +479,15 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
   absent after `colcon build`, and only this distinction catches it.
 - `scripts/check_nav2_plugins.py` — plugin naming style against the target distro.
 - `scripts/check_sql.py` — the memory layer's queries against its own schema.
+- `scripts/check_sim_wiring.py` — a Gazebo sensor and its bridge entry are
+  joined only by a string typed in two files, and nothing complains when they
+  disagree: the sensor publishes into the void and the subscriber waits forever.
+  It checks that every sensor is bridged, that nothing is forwarded that no
+  sensor produces, and that the message type matches the sensor type (a
+  `gpu_lidar` bridged as an `Image` fails on the first message, not at startup).
+  The consequence is uneven: a missing camera is obvious, a missing ToF beam is
+  not — `terrain_monitor` reports that beam as `unknown`, which is neither a
+  cliff nor a riser, so the robot approaches a staircase seeing nothing.
 - `scripts/check_agent_contract.py` — the MCP server is the only place a tool is
   defined, but four other places name tools as bare strings and none of them
   fails loudly when a name goes stale: the agent's system prompt (which briefs
