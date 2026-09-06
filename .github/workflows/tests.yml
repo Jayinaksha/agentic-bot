@@ -108,7 +108,7 @@ jobs:
         run: |
           python - <<'EOF'
           import sys, yaml
-          sys.path.insert(0, 'src/src/r2d2_sim/worlds'.replace('src/src', 'src'))
+          sys.path.insert(0, 'src/r2d2_sim/worlds')
           from generate_house import (MIN_APPROACH_CLEARANCE, STAIR_X0,
                                       floor_transitions)
 

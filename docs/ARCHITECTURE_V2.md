@@ -449,7 +449,27 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 - Topic-wiring audit confirms `/cmd_vel` and `/locomotion/mode` each have
   exactly one writer.
 - `generate_house.py` output matches the committed world byte for byte.
-- All of the above runs in CI (`.github/workflows/tests.yml`) on every push.
+- `scripts/check_params.py` — cross-checks every node's `declare_parameters`
+  against the YAML section that configures it, in both directions. A misspelled
+  ROS 2 parameter fails silently, so this is the only place it can be caught.
+- `scripts/check_ci.py` — runs the whole workflow locally, so a broken CI step
+  is found before a push rather than after one.
+- All of the above runs in CI (`.github/workflows/tests.yml`) on every push,
+  across Python 3.10 (Humble) and 3.12 (Jazzy).
+
+### Bugs this tooling found
+
+None of these were visible by reading the code; each needed two sources
+compared, or a number computed.
+
+| Bug | Consequence | Found by |
+|---|---|---|
+| Carriers held at zero *velocity*, not phase | Chassis rides anywhere in a 57 mm band, past the 35 mm ToF step threshold → phantom stairs on flat floor | `analyse_climb.py`, ride height |
+| Mount trigger waited on body pitch | Phase-locked carriers cannot tip; approach times out → **never climbs a single step** | Following the fix above |
+| Descent unimplemented | Robot goes upstairs and never comes back down, while the route planner emits descend legs | Reading the FSM against the route planner |
+| "Foot of stairs" pose on the first step | Climb starts already standing on the flight | Generated vs. hand-typed coordinates |
+| 0.20 m of approach clearance | A 0.36 m robot cannot square up to the flight | Same comparison |
+| Contact detector 4× slow | Would have missed its own confirmation window | Tracing the detector by hand |
 
 ### Known warnings, accepted deliberately
 

@@ -98,6 +98,8 @@ Three helper scripts, all of which are worth running before the simulator:
 
 ```bash
 python3 scripts/analyse_climb.py     # can this platform climb these stairs?
+python3 scripts/check_params.py      # do the YAML files match the nodes?
+python3 scripts/check_ci.py          # run the whole CI locally before pushing
 python3 scripts/calibrate_slip.py    # measure yaw_slip_factor (needs ROS)
 python3 scripts/check_memory.py      # ledger + pgvector against real backends
 ```
@@ -109,9 +111,11 @@ hold that let the chassis ride anywhere in a 57 mm band (well past the 35 mm
 step the terrain monitor looks for), and — following from the fix — a
 stair-mount trigger that waited for a body pitch that phase-locked carriers can
 never produce, so the robot would have aborted every climb. The same pass found
-that descent was unimplemented: the robot could go upstairs and never come back
-down. Descent now exists but ships **off by default**, since it is
-dead-reckoned over the last few centimetres and untested. Tests and checks
+three more: descent was unimplemented (the robot could go upstairs and never
+come back down), the "foot of the stairs" pose sat on the first step, and the
+staircase left a 0.36 m robot 0.20 m of room to approach it. Descent now exists
+but ships **off by default**, since it is dead-reckoned over the last few
+centimetres and untested. Tests and checks
 both run in CI on every push.
 
 > **The v2 stack has not been run on hardware or in simulation.** The maths and
