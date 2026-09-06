@@ -481,7 +481,7 @@ compared, or a number computed.
 
 | Check | Finding | Why it stands |
 |---|---|---|
-| Gait match | One 120° tumble advances 0.199 m against a 0.318 m step pitch (ratio 0.63) | Matching exactly needs `cluster_circumradius` = 0.183 m, which costs 60% more peak torque and a much taller robot. The climb works, it is just lumpy; `climb_timeout` is wide enough |
+| Gait match | One 120° tumble advances 0.199 m against a 0.318 m step pitch (ratio 0.63) | Matching exactly needs `cluster_circumradius` = 0.183 m, which costs 60% more peak torque and a much taller robot. See the note below on what this ratio does and does not tell you |
 | Torque | Peak 4.7 N·m per cluster when two clusters carry the lift | A real BOM constraint, now recorded as `min_cluster_torque` in `robot_params.yaml`. A typical hobby gearmotor (2–4 N·m) will stall on the first riser |
 
 ### NOT verified
@@ -501,6 +501,43 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   written against Cosmos Reason 2's documented output shape.
 - **The Postgres schema has never been applied**, and the ivfflat `lists=100`
   is a starting guess.
+
+### An attempt that was abandoned, and why
+
+The gait ratio of 0.63 is not a verdict. It is equally consistent with a cluster
+that walks the flight awkwardly and one that wedges against the second riser and
+stops, and the difference decides whether the platform works at all. So I tried
+to settle it with a kinematic simulation: roll a rigid tri-star up an exact stair
+profile and see what happens.
+
+It was written twice and failed falsification both times. Before trusting any
+result, the simulator was asked to climb risers well beyond the cluster's
+0.165 m reach — a 0.30 m step, then a 0.50 m wall. Both versions cheerfully
+reported success:
+
+```
+riser 0.150 (designed)      -> CLIMBS
+riser 0.300 (far beyond)    -> CLIMBS     <- must be impossible
+riser 0.500 (a wall)        -> CLIMBS     <- must be impossible
+```
+
+The first version resolved wheel contacts vertically only, so a wheel driven
+into a riser face was simply lifted over it. The second added a pivot model but
+resolved penetration by lifting the cluster out of it, which is the same bug
+wearing a different hat. Both errors happened to flatter the design, which is
+the signature of a model with an escape hatch in it.
+
+Getting this right means writing a small rigid-body contact solver, and two
+wrong attempts is poor evidence that a third would be right. **A subtly wrong
+simulator reporting "it climbs" is considerably worse than no simulator**, since
+it would give false confidence about the single riskiest part of the project.
+So the code was deleted rather than committed.
+
+The honest position is that the reach and tread checks are sound and necessary
+but not sufficient, and whether the cluster tracks this particular staircase is
+a question for Gazebo — which is the right tool, and which you are going to run
+anyway. If you do revisit it, the falsification test above is the bar: a
+simulator that cannot refuse a 0.50 m wall is not measuring anything.
 
 ### Suggested bring-up order
 
