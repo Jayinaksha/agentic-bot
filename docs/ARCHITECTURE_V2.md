@@ -439,7 +439,16 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
   | `r2d2_sim` | 21 | Wall-gap splitting, world geometry, and a flood-fill proving every room is actually reachable |
 
 - `scripts/analyse_climb.py` — quasi-static analysis of reach, tread fit, gait
-  match, tipping, torque, climb duration and ride height. **This found two real
+  match, tipping, torque, climb duration, ride height, mass model and inertia
+  realisability. Mass and centre of mass are read from the **expanded URDF**,
+  not summed by hand from `robot_params.yaml`: the tipping and torque results
+  only mean anything if they describe the robot that actually spawns, and a
+  second hand-maintained copy of the mass is exactly what has drifted here
+  before. The true centre of mass sits 4 mm above the axle — a 1° reduction in
+  tipping margin against 21° of headroom, so harmless, but now measured rather
+  than assumed. It also rejects inertia tensors whose principal moments break
+  the triangle inequality, which describe no physical object and make a contact
+  solver produce motion that reads as a controller bug. **This found two real
   bugs**: the zero-velocity carrier hold, and — following from it — a mount
   trigger that could never have fired. The same analytical pass found a third:
   descent was entirely unimplemented while the route planner emitted descend

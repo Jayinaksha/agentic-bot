@@ -64,8 +64,33 @@ jobs:
 
       # Fails the build if the platform can no longer climb the staircase it is
       # specified against - reach, tread fit, tipping, torque, ride height.
+      # xacro and the ament stub let the analyser read the EXPANDED URDF rather
+      # than a mass summed by hand in robot_params.yaml. The tipping and torque
+      # results are only meaningful if they describe the robot that spawns, and
+      # a hand-summed mass is exactly the kind of second copy that has drifted
+      # here before.
       - name: tri-star climb envelope
-        run: python scripts/analyse_climb.py
+        run: |
+          python -m pip install --quiet xacro
+          mkdir -p /tmp/stubs/ament_index_python
+          touch /tmp/stubs/ament_index_python/__init__.py
+          cat > /tmp/stubs/ament_index_python/packages.py <<'STUB'
+          import os
+          ROOT = os.path.join(os.getcwd(), 'src')
+          class PackageNotFoundError(Exception):
+              pass
+          def get_package_share_directory(name):
+              path = os.path.join(ROOT, name)
+              if not os.path.isdir(path):
+                  raise PackageNotFoundError(name)
+              return path
+          def get_package_prefix(name):
+              return get_package_share_directory(name)
+          STUB
+          PYTHONPATH=/tmp/stubs python scripts/analyse_climb.py
+          # The fallback path must also work: a developer without xacro should
+          # get a warning and a usable answer, not a crash.
+          python scripts/analyse_climb.py --no-urdf
 
       # The world generator refuses to emit stairs the robot cannot mount, so
       # this also proves robot and test world are still in step.

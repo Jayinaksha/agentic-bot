@@ -15,6 +15,16 @@ solver settings dominate the answer. So the checks that can be settled on paper
 are settled here, on the same robot_params.yaml the URDF and the world generator
 read, and re-run whenever those numbers change.
 
+Where the numbers come from
+---------------------------
+Mass and centre of mass are read from the EXPANDED URDF when xacro is available,
+not estimated from robot_params.yaml. That distinction matters: the tipping and
+torque checks are only meaningful if they describe the robot that actually
+spawns, and a summed-by-hand mass is exactly the kind of second copy that has
+drifted before in this repo. Without xacro installed the script falls back to
+the parameter estimate and says so, rather than silently analysing a robot that
+does not exist.
+
 What is checked
 ---------------
   1. Reach          can a cluster get a sub-wheel onto the step at all
@@ -25,6 +35,9 @@ What is checked
   6. Speed          how long a flight takes, against the FSM timeout
   7. Ride height    does rolling mode hold a constant chassis height, which the
                     ToF terrain thresholds assume
+  8. Mass model     does the URDF agree with robot_params.yaml about how heavy
+                    the robot is and where its mass sits
+  9. Inertia        are the inertia tensors physically possible
 
 Everything is quasi-static: no impact loads, no wheel slip, no compliance. Real
 margins will be worse, which is the right direction for a check whose job is to
@@ -38,7 +51,7 @@ import math
 import os
 import sys
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 try:
     import yaml
@@ -46,12 +59,106 @@ except ImportError:
     sys.exit('PyYAML required: pip install pyyaml')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_PARAMS = os.path.normpath(os.path.join(
-    HERE, '..', 'src', 'r2d2_description', 'config', 'robot_params.yaml'))
+ROOT = os.path.normpath(os.path.join(HERE, '..'))
+DEFAULT_PARAMS = os.path.join(
+    ROOT, 'src', 'r2d2_description', 'config', 'robot_params.yaml')
 
 G = 9.81
 
 PASS, WARN, FAIL = 'PASS', 'WARN', 'FAIL'
+
+
+@dataclass
+class Inertials:
+    """Mass properties read from the expanded URDF."""
+
+    total_mass: float
+    com_z: float
+    links: int
+    bad_tensors: List[Tuple[str, float, float, float]]
+    source: str
+
+
+def load_inertials(urdf_path: str) -> Optional[Inertials]:
+    """Expand the robot description and sum its real mass properties.
+
+    Returns None when xacro is not importable, which is the normal case on a
+    machine without ROS. CI always has it.
+    """
+    try:
+        import xacro
+    except ImportError:
+        return None
+
+    import xml.dom.minidom as minidom
+    try:
+        doc = xacro.process_file(urdf_path, mappings={'use_sim': 'true'})
+    except Exception as exc:                       # noqa: BLE001
+        raise SystemExit(f'xacro could not expand {urdf_path}: {exc}')
+
+    robot = minidom.parseString(doc.toxml()).documentElement
+
+    def origin_z(node) -> float:
+        found = node.getElementsByTagName('origin')
+        if not found:
+            return 0.0
+        value = found[0].getAttribute('xyz') or '0 0 0'
+        return float(value.split()[2])
+
+    # Only joints that are direct children of <robot> are kinematic; the
+    # ros2_control block carries its own <joint> elements with no parent or
+    # child, and walking those produces nonsense.
+    tree = {}
+    for joint in robot.childNodes:
+        if getattr(joint, 'tagName', None) != 'joint':
+            continue
+        children = joint.getElementsByTagName('child')
+        parents = joint.getElementsByTagName('parent')
+        if not children or not parents:
+            continue
+        tree[children[0].getAttribute('link')] = (
+            parents[0].getAttribute('link'), origin_z(joint))
+
+    def world_z(link: str) -> float:
+        z, seen = 0.0, set()
+        while link in tree and link not in seen:
+            seen.add(link)
+            parent, offset = tree[link]
+            z += offset
+            link = parent
+        return z
+
+    total = moment = 0.0
+    count = 0
+    bad: List[Tuple[str, float, float, float]] = []
+
+    for link in robot.childNodes:
+        if getattr(link, 'tagName', None) != 'link':
+            continue
+        inertial = link.getElementsByTagName('inertial')
+        if not inertial:
+            continue
+        name = link.getAttribute('name')
+        mass = float(inertial[0].getElementsByTagName('mass')[0]
+                     .getAttribute('value'))
+        tensor = inertial[0].getElementsByTagName('inertia')[0]
+        ixx, iyy, izz = (float(tensor.getAttribute(k))
+                         for k in ('ixx', 'iyy', 'izz'))
+
+        # A rigid body's principal moments must satisfy the triangle
+        # inequality. A tensor that does not describes no physical object, and
+        # a contact solver handed one produces motion that looks like a bug in
+        # the controller.
+        if not (ixx + iyy >= izz and iyy + izz >= ixx and ixx + izz >= iyy):
+            bad.append((name, ixx, iyy, izz))
+
+        total += mass
+        moment += mass * (world_z(name) + origin_z(inertial[0]))
+        count += 1
+
+    return Inertials(total_mass=total, com_z=moment / total if total else 0.0,
+                     links=count, bad_tensors=bad,
+                     source=os.path.relpath(urdf_path, ROOT))
 
 
 @dataclass
@@ -62,8 +169,8 @@ class Finding:
     advice: Optional[str] = None
 
 
-def analyse(cfg: dict, riser: float, tread: float,
-            steps: int) -> List[Finding]:
+def analyse(cfg: dict, riser: float, tread: float, steps: int,
+            inertials: Optional[Inertials] = None) -> List[Finding]:
     p = cfg['platform']
     r_w = p['sub_wheel_radius']
     r_c = p['cluster_circumradius']
@@ -73,7 +180,13 @@ def analyse(cfg: dict, riser: float, tread: float,
     max_cluster_rate = p['max_cluster_rate']
     climb_speed = p['climb_linear_vel']
 
-    mass = (p['body_mass'] + 4 * p['cluster_mass'] + p['tail_mass'] + 0.30)
+    estimated_mass = p['body_mass'] + 4 * p['cluster_mass'] + p['tail_mass'] + 0.30
+    if inertials is not None:
+        mass = inertials.total_mass
+        com_height = inertials.com_z
+    else:
+        mass = estimated_mass
+        com_height = axle_z
     weight = mass * G
 
     findings: List[Finding] = []
@@ -145,7 +258,6 @@ def analyse(cfg: dict, riser: float, tread: float,
     # --- 4. static tip -----------------------------------------------------
     # On the flight the body is inclined at `slope`. Backward tipping happens
     # when the centre of mass passes behind the rearmost support.
-    com_height = axle_z
     rear_support = wheelbase / 2.0
     tip_angle_no_tail = math.atan2(rear_support, com_height)
     tip_angle_tail = math.atan2(rear_support + tail_l, com_height)
@@ -161,11 +273,14 @@ def analyse(cfg: dict, riser: float, tread: float,
             'lower the centre of mass, lengthen the wheelbase, or treat the '
             'tail as a load-bearing part rather than a safety net'))
     else:
+        origin = ('URDF' if inertials is not None
+                  else 'axle height, no URDF available')
         findings.append(Finding(
             'static tip', PASS,
             f'{math.degrees(slope):.1f} deg flight against a '
             f'{math.degrees(tip_angle_no_tail):.1f} deg bare-chassis tipping '
-            f'angle ({math.degrees(tip_angle_tail):.1f} deg with the tail)'))
+            f'angle ({math.degrees(tip_angle_tail):.1f} deg with the tail), '
+            f'centre of mass {com_height:.4f} m from the {origin}'))
 
     # --- 5. torque ---------------------------------------------------------
     # Steady state: gravity along the slope, shared by four clusters.
@@ -250,6 +365,52 @@ def analyse(cfg: dict, riser: float, tread: float,
             f'two sub-wheels: it is the lower centre of mass and the stabler '
             f'of the two'))
 
+    # --- 8. mass model ------------------------------------------------------
+    if inertials is None:
+        findings.append(Finding(
+            'mass model', WARN,
+            f'xacro is not installed, so mass and centre of mass are estimated '
+            f'from robot_params.yaml ({estimated_mass:.2f} kg, centre of mass '
+            f'assumed at the axle). The tipping and torque results describe '
+            f'that estimate, not the robot that spawns',
+            'pip install xacro to analyse the real description'))
+    else:
+        drift = abs(inertials.total_mass - estimated_mass)
+        detail = (f'{inertials.links} links, {inertials.total_mass:.3f} kg, '
+                  f'centre of mass at {inertials.com_z:.4f} m '
+                  f'({(inertials.com_z - axle_z) * 1000:+.0f} mm relative to '
+                  f'the axle)')
+        if drift > 0.10 * estimated_mass:
+            findings.append(Finding(
+                'mass model', FAIL,
+                f'the URDF weighs {inertials.total_mass:.2f} kg but '
+                f'robot_params.yaml sums to {estimated_mass:.2f} kg, a '
+                f'{drift / estimated_mass * 100:.0f}% disagreement. {detail}',
+                'the torque figures above are computed from the URDF; the '
+                'component masses in robot_params.yaml no longer describe it'))
+        else:
+            findings.append(Finding(
+                'mass model', PASS,
+                f'{detail}; robot_params.yaml agrees to within '
+                f'{drift / estimated_mass * 100:.1f}%'))
+
+    # --- 9. inertia ---------------------------------------------------------
+    if inertials is not None:
+        if inertials.bad_tensors:
+            names = ', '.join(name for name, *_ in inertials.bad_tensors[:4])
+            findings.append(Finding(
+                'inertia', FAIL,
+                f'{len(inertials.bad_tensors)} link(s) have principal moments '
+                f'that violate the triangle inequality and so describe no '
+                f'physical object: {names}',
+                'a contact solver handed an impossible tensor produces motion '
+                'that reads as a controller bug; fix the tensors first'))
+        else:
+            findings.append(Finding(
+                'inertia', PASS,
+                f'all {inertials.links} inertia tensors are physically '
+                f'realisable'))
+
     return findings
 
 
@@ -260,6 +421,10 @@ def main() -> int:
     ap.add_argument('--riser', type=float)
     ap.add_argument('--tread', type=float)
     ap.add_argument('--steps', type=int)
+    ap.add_argument('--urdf', default=os.path.join(
+        ROOT, 'src', 'r2d2_description', 'urdf', 'r2d2_tristar.urdf.xacro'))
+    ap.add_argument('--no-urdf', action='store_true',
+                    help='skip the URDF and use the robot_params estimate')
     args = ap.parse_args()
 
     with open(args.params) as fh:
@@ -270,12 +435,16 @@ def main() -> int:
     tread = args.tread if args.tread is not None else stairs.get('tread', 0.28)
     steps = args.steps if args.steps is not None else stairs.get('steps', 12)
 
+    inertials = None if args.no_urdf else load_inertials(args.urdf)
+    mass_source = 'expanded URDF' if inertials else 'robot_params estimate'
+
     print('tri-star climb analysis')
     print(f'  platform : {args.params}')
+    print(f'  mass     : {mass_source}')
     print(f'  staircase: {steps} x {riser:.3f} m riser / {tread:.3f} m tread '
           f'({math.degrees(math.atan2(riser, tread)):.1f} deg)\n')
 
-    findings = analyse(cfg, riser, tread, steps)
+    findings = analyse(cfg, riser, tread, steps, inertials)
     width = max(len(f.check) for f in findings)
 
     for f in findings:
