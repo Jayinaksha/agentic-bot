@@ -25,7 +25,7 @@ import json
 import math
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import rclpy
 from rclpy.action import ActionClient
@@ -34,7 +34,7 @@ from rclpy.node import Node
 from rclpy.qos import (DurabilityPolicy, HistoryPolicy, QoSProfile,
                        ReliabilityPolicy)
 
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import Twist
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan

@@ -14,8 +14,6 @@ import json
 import os
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from r2d2_mcp.agent import Agent, _READ_ONLY_TOOLS, _assistant_message, _unpack  # noqa: E402

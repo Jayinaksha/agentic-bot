@@ -28,7 +28,6 @@ from __future__ import annotations
 import glob
 import os
 import re
-import sys
 from typing import Dict, Set
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))

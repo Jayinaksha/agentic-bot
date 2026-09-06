@@ -520,6 +520,8 @@ compared, or a number computed.
 | SQL parses and matches the schema | `check_sql.py` via pglast |
 | VLA request shape matches NVIDIA's API | checked against NVIDIA's reference |
 | Credentials do not reach logs, the ledger, or the model | tested against real httpx/asyncpg failures |
+| The URDF expands and matches its controller config | `xacro` actually run, in CI |
+| No undefined names anywhere in the v2 code | `pyflakes`, in CI |
 | **The robot actually climbs the stairs** | **unverified — needs Gazebo** |
 | **Nav2 parameter values are well tuned** | **unverified — needs a running stack** |
 | **The VLA returns usable JSON in practice** | **unverified — needs a live call** |
@@ -533,8 +535,17 @@ Nothing in this container has ROS 2, Gazebo, NATS, Postgres or a GPU, so:
   Expect to tune `max_step_size`, friction and the solver before it climbs
   cleanly. The physics block is already set for a 1 ms step with a stiff
   solver for this reason.
-- **No launch file has been executed.** Node names, remappings and parameter
-  plumbing are written carefully but not run. What *has* been checked
+- **No launch file has been executed.** `launch` is a ROS-only package with no
+  PyPI release, so `generate_launch_description()` cannot be called here. Node
+  names, remappings and parameter plumbing are written carefully but not run.
+  What *is* now checked: `pyflakes` resolves every name in every launch file, so
+  a `NameError` from a missing import cannot survive — that class was invisible
+  to `py_compile`, which only checks syntax.
+- The **URDF is no longer in this list**. `xacro` is on PyPI, so CI actually
+  expands it and asserts the result: 26 links, 25 joints, a single kinematic
+  root, all 7 sensor frames present, no non-positive inertias, and all 16
+  controlled joints matching both `controllers.yaml` and the `ros2_control`
+  block. Parsing the XML said none of that. What *has* been checked
   statically, by `check_launch.py`: every `Node(package=, executable=)` names an
   executable that package really installs (from `console_scripts` *or* CMake
   `add_executable` + `install(TARGETS)`), and every config and xacro path

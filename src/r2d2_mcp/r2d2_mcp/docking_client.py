@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from std_msgs.msg import String
 

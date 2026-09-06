@@ -41,7 +41,7 @@ import math
 import os
 import re
 import sys
-from typing import Dict, List, Set, Tuple
+from typing import Dict, Set, Tuple
 
 try:
     import yaml

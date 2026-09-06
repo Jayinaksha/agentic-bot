@@ -222,6 +222,92 @@ jobs:
 
       - run: python -m pip install --upgrade pip pyyaml
 
+      # py_compile checks syntax and nothing else: a NameError from a missing
+      # import sails straight through it, and would only surface when that line
+      # runs on a robot. pyflakes resolves names. Scoped to the v2 packages -
+      # the v1 code has pre-existing findings that are not this branch's to churn.
+      - name: no undefined names or dead imports in the v2 code
+        run: |
+          python -m pip install --quiet pyflakes
+          python -m pyflakes $(find src/r2d2_description src/r2d2_sim \
+            src/r2d2_locomotion src/r2d2_localization src/r2d2_navigation \
+            src/r2d2_perception src/r2d2_memory src/r2d2_mcp scripts \
+            -name '*.py')
+
+      # The URDF is the foundation everything else spawns from. Parsing its XML
+      # says nothing about whether xacro can expand it - an undefined property or
+      # a macro signature mismatch fails only when xacro actually runs.
+      - name: the robot description processes through xacro
+        run: |
+          python -m pip install --quiet xacro
+          mkdir -p /tmp/stubs/ament_index_python
+          touch /tmp/stubs/ament_index_python/__init__.py
+          cat > /tmp/stubs/ament_index_python/packages.py <<'STUB'
+          import os
+          ROOT = os.path.join(os.getcwd(), 'src')
+          class PackageNotFoundError(Exception):
+              pass
+          def get_package_share_directory(name):
+              path = os.path.join(ROOT, name)
+              if not os.path.isdir(path):
+                  raise PackageNotFoundError(name)
+              return path
+          def get_package_prefix(name):
+              return get_package_share_directory(name)
+          STUB
+          PYTHONPATH=/tmp/stubs python - <<'EOF'
+          import sys, xml.dom.minidom as minidom, yaml, xacro
+
+          doc = xacro.process_file('src/r2d2_description/urdf/r2d2_tristar.urdf.xacro',
+                                   mappings={'use_sim': 'true'})
+          open('/tmp/robot.urdf', 'w').write(doc.toprettyxml(indent='  '))
+          parsed = minidom.parse('/tmp/robot.urdf')
+
+          joints = {j.getAttribute('name') for j in parsed.getElementsByTagName('joint')}
+          links = {l.getAttribute('name') for l in parsed.getElementsByTagName('link')}
+          problems = []
+
+          # The controller commands joints by name; a mismatch is silent.
+          controllers = yaml.safe_load(open('src/r2d2_locomotion/config/controllers.yaml'))
+          declared = controllers['tristar_velocity_controller']['ros__parameters']['joints']
+          missing = [j for j in declared if j not in joints]
+          if missing:
+              problems.append(f'controllers.yaml names joints absent from the URDF: {missing}')
+
+          block = parsed.getElementsByTagName('ros2_control')
+          listed = {j.getAttribute('name') for j in block[0].getElementsByTagName('joint')} if block else set()
+          if listed != set(declared):
+              problems.append(f'ros2_control and controllers.yaml disagree: {listed ^ set(declared)}')
+
+          children = {j.getElementsByTagName('child')[0].getAttribute('link')
+                      for j in parsed.getElementsByTagName('joint')
+                      if j.getElementsByTagName('child')}
+          roots = links - children
+          if len(roots) != 1:
+              problems.append(f'the kinematic tree has {len(roots)} roots: {sorted(roots)}')
+
+          for frame in ('laser', 'imu_link', 'camera_link',
+                        'tof_fl', 'tof_fr', 'tof_rl', 'tof_rr', 'tail_link'):
+              if frame not in links:
+                  problems.append(f'sensor frame {frame} is missing')
+
+          for link in parsed.getElementsByTagName('link'):
+              inertial = link.getElementsByTagName('inertial')
+              if not inertial:
+                  continue
+              mass = float(inertial[0].getElementsByTagName('mass')[0].getAttribute('value'))
+              inertia = inertial[0].getElementsByTagName('inertia')[0]
+              if mass <= 0 or any(float(inertia.getAttribute(k)) <= 0
+                                  for k in ('ixx', 'iyy', 'izz')):
+                  problems.append(f'{link.getAttribute("name")} has non-positive mass or inertia')
+
+          for problem in problems:
+              print(f'::error::{problem}')
+          print(f'URDF expands: {len(links)} links, {len(joints)} joints, '
+                f'{len(declared)} controlled joints all present')
+          sys.exit(1 if problems else 0)
+          EOF
+
       - name: every v2 file parses
         run: |
           python - <<'EOF'

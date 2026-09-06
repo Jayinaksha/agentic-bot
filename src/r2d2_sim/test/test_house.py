@@ -10,7 +10,6 @@ reach the kitchen. That is expensive to diagnose in Gazebo and cheap to catch
 here, so the interesting test rasterises the world and flood-fills it.
 """
 
-import math
 import os
 import sys
 

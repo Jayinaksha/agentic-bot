@@ -104,15 +104,13 @@ def referenced_columns(statement) -> Set[str]:
 
 def main() -> int:
     try:
-        import pglast  # noqa: F401
+        import pglast
     except ImportError:
         print('pglast is not installed, so the SQL cannot be checked against a '
               'real PostgreSQL grammar.\n'
               '  pip install pglast\n'
               'Skipping rather than passing silently.', file=sys.stderr)
         return 0
-
-    import pglast
 
     relations, every_column = schema_columns(os.path.join(ROOT, SCHEMA))
     print(f'schema: {len(relations)} relations, {len(every_column)} columns\n')

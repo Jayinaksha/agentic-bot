@@ -42,8 +42,8 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray, String, Bool
 
 from r2d2_locomotion.kinematics import (CLUSTERS, LEFT_CLUSTERS, MODE_ROLLING,
-                                        MODE_STOPPED, MODE_TUMBLING, MODES,
-                                        URDF_PHASES, body_twist, integrate_arc,
+                                        MODE_TUMBLING, MODES, URDF_PHASES,
+                                        body_twist, integrate_arc,
                                         joint_commands, rate_limit, side_speeds)
 
 

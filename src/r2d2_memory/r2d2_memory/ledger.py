@@ -34,7 +34,7 @@ import json
 import os
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 try:

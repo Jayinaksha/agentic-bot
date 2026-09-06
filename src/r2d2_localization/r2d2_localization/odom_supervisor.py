@@ -51,7 +51,7 @@ scan matcher slides.
 import json
 import math
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 import rclpy
 from rclpy.node import Node

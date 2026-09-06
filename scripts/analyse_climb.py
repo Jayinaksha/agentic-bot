@@ -270,7 +270,7 @@ def main() -> int:
     tread = args.tread if args.tread is not None else stairs.get('tread', 0.28)
     steps = args.steps if args.steps is not None else stairs.get('steps', 12)
 
-    print(f'tri-star climb analysis')
+    print('tri-star climb analysis')
     print(f'  platform : {args.params}')
     print(f'  staircase: {steps} x {riser:.3f} m riser / {tread:.3f} m tread '
           f'({math.degrees(math.atan2(riser, tread)):.1f} deg)\n')

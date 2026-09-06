@@ -36,7 +36,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only without the dependency
     asyncpg = None
 
-from r2d2_memory.embeddings import EMBED_DIM, Embedder, make_embedder
+from r2d2_memory.embeddings import Embedder, make_embedder
 
 log = logging.getLogger('r2d2.store')
 
