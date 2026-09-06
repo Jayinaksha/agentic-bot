@@ -479,6 +479,15 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
   absent after `colcon build`, and only this distinction catches it.
 - `scripts/check_nav2_plugins.py` — plugin naming style against the target distro.
 - `scripts/check_sql.py` — the memory layer's queries against its own schema.
+- `scripts/check_agent_contract.py` — the MCP server is the only place a tool is
+  defined, but four other places name tools as bare strings and none of them
+  fails loudly when a name goes stale: the agent's system prompt (which briefs
+  the model on specific tools), `_READ_ONLY_TOOLS` (which decides what a
+  `--dry-run` may still execute), the prose inside tool *return values*, and
+  CI's own schema-exemption list. It reads tool names straight out of the
+  decorators via the AST, so it needs neither the SDK nor ROS. It also refuses
+  to let an acting tool sit in the read-only set — a movement tool taking a name
+  already listed there would make `--dry-run` move the robot.
 - `scripts/check_ci.py` — runs the whole workflow locally, so a broken CI step
   is found before a push rather than after one. It honours each step's `env`
   block, strips dependency installs rather than skipping whole steps, and

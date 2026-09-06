@@ -441,6 +441,13 @@ jobs:
       - name: Nav2 plugin names are consistently styled
         run: python scripts/check_nav2_plugins.py
 
+      # The MCP server is the only place a tool is defined, but the agent's
+      # system prompt, its dry-run allow list, tool result strings and this
+      # workflow's own exemption list all name tools as bare strings. None of
+      # them fails loudly when a name goes stale.
+      - name: everything naming a tool agrees with the tools that exist
+        run: python scripts/check_agent_contract.py
+
       - name: referenced scripts exist
         run: |
           python - <<'EOF'
