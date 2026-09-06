@@ -97,6 +97,27 @@ position rather than chosen.
 
 This was caught by `scripts/analyse_climb.py`, not by inspection.
 
+### Detecting contact with a riser
+
+The phase hold has a consequence that is easy to miss and fatal if missed. With
+the carriers locked, a sub-wheel meeting a riser face **stalls** the robot — the
+chassis does not tip. So the obvious mount trigger, `pitch > threshold`, never
+fires: the approach drives at the step for its full timeout and aborts having
+never started the climb. The platform would not have climbed a single step.
+
+The signal that does work is the stall itself. Wheel odometry is valid in
+rolling mode, so `RiserContact` compares achieved travel against commanded
+travel and declares contact when, for 0.6 s continuously:
+
+- both front ToF beams see a climbable riser, **and**
+- achieved travel falls below 35% of commanded travel
+
+Both conditions are needed in each direction. Stall alone fires on a chair leg
+or a rug. Riser-ahead alone fires while the robot is still a lookahead away, and
+tumbling in free space walks the platform forward on its cluster corners instead
+of driving. Pitch remains as a secondary trigger for shallow nosings the robot
+does partly ride up, but it is never the only one.
+
 ---
 
 ## 3. Terrain sensing without a depth camera
@@ -360,19 +381,20 @@ tunnel is needed — a real simplification over the v1 autossh arrangement.
 
 ### Verified here
 
-- **205 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
+- **217 unit tests**, all passing, none requiring ROS/Gazebo/NATS/Postgres:
 
   | Suite | Tests | Covers |
   |---|---|---|
-  | `r2d2_locomotion` | 47 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, arc odometry, ToF geometry, climb envelope |
+  | `r2d2_locomotion` | 59 | Skid-steer kinematics, mode-dependent joint commands, carrier phase hold, riser contact detection, arc odometry, ToF geometry, climb envelope |
   | `r2d2_navigation` | 44 | TLS line fitting, doorway detection, docking sign conventions, cross-floor routing |
   | `r2d2_memory` | 28 | Hash-chain tamper detection, merge radius, position fusion, embeddings |
   | `r2d2_perception` | 44 | Pixel→bearing, median ranging, world projection, VLA response parsing |
   | `r2d2_mcp` | 42 | Tool-call parsing, agent loop, failure paths, dry run |
 
 - `scripts/analyse_climb.py` — quasi-static analysis of reach, tread fit, gait
-  match, tipping, torque, climb duration and ride height. **This found a real
-  bug**: the zero-velocity carrier hold described above. Two warnings stand
+  match, tipping, torque, climb duration and ride height. **This found two real
+  bugs**: the zero-velocity carrier hold, and — following from it — a mount
+  trigger that could never have fired, both described above. Two warnings stand
   deliberately (see below).
 - All Python compiles; all XML/YAML/SDF parses; every `setup.py` entry point
   resolves to a real module; every referenced script exists.

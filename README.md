@@ -85,7 +85,7 @@ export R2D2_MEMORY=on
 
 ### Tests and design checks
 
-205 unit tests covering the geometry and control logic, none of which need ROS,
+217 unit tests covering the geometry and control logic, none of which need ROS,
 Gazebo, NATS, Postgres or a model endpoint:
 
 ```bash
@@ -104,9 +104,12 @@ python3 scripts/check_memory.py      # ledger + pgvector against real backends
 
 `analyse_climb.py` settles reach, tread fit, gait match, tipping, torque and
 ride height on paper, on the same `robot_params.yaml` the URDF and world
-generator read. It already caught one shipped bug — a zero-velocity carrier hold
-that let the chassis ride anywhere in a 57 mm band, well past the 35 mm step the
-terrain monitor is looking for. Tests and checks both run in CI on every push.
+generator read. It has already caught two shipped bugs: a zero-velocity carrier
+hold that let the chassis ride anywhere in a 57 mm band (well past the 35 mm
+step the terrain monitor looks for), and — following from the fix — a
+stair-mount trigger that waited for a body pitch that phase-locked carriers can
+never produce, so the robot would have aborted every climb. Tests and checks
+both run in CI on every push.
 
 > **The v2 stack has not been run on hardware or in simulation.** The maths and
 > control logic are unit-tested; the ROS graph, Gazebo physics and Nav2

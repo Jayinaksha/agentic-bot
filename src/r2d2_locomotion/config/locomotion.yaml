@@ -70,6 +70,13 @@ climb_fsm:
     entry_confirm_cycles: 6       # ~0.3 s of agreement before committing
     exit_confirm_cycles: 10       # ~0.5 s of level attitude before declaring done
     approach_speed: 0.10          # m/s, creep onto the first riser
+    approach_timeout: 15.0        # s before giving up on reaching the riser
+    # Contact with a riser is a STALL, not a pitch: with the carriers
+    # phase-locked in rolling mode a sub-wheel meeting a riser face stops dead
+    # rather than tipping the chassis. Achieved travel below this fraction of
+    # commanded travel, while both front ToF beams see a riser, means contact.
+    contact_stall_ratio: 0.35
+    contact_confirm_s: 0.6
     climb_speed: 0.12             # m/s effective while tumbling
     align_gain: 1.4               # yaw P gain keeping the flight square
     max_align_yaw: 0.35           # rad/s

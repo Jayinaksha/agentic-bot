@@ -16,8 +16,11 @@ ALIGN     Square the platform to the flight. The two front ToF beams give a
           is the classic failure mode for tri-wheel platforms - one side mounts,
           the other does not, and the robot ends up wedged diagonally.
 APPROACH  Creep forward in rolling mode until the front clusters are against
-          the riser (detected as the riser distance closing plus a drop in
-          forward progress).
+          the riser. Contact is detected as a STALL - commanded travel with no
+          achieved travel - and not as body pitch. In rolling mode the carriers
+          are phase-locked, so a sub-wheel meeting a riser face stops dead
+          rather than tipping the chassis; waiting for pitch here means waiting
+          forever and timing out having never started the climb.
 CLIMB     Tumbling mode. Constant slow forward command; the clusters walk the
           risers. Yaw is servoed off the skew signal continuously, because a
           tri-star flight drifts. Exits when the IMU reports level attitude for
@@ -42,8 +45,11 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Bool, String
+
+from r2d2_locomotion.kinematics import RiserContact
 
 
 class State(Enum):
@@ -70,6 +76,9 @@ class ClimbFsm(Node):
             ('entry_confirm_cycles', 6),
             ('exit_confirm_cycles', 10),
             ('approach_speed', 0.10),
+            ('contact_stall_ratio', 0.35),
+            ('contact_confirm_s', 0.6),
+            ('approach_timeout', 15.0),
             ('climb_speed', 0.12),
             ('align_gain', 1.4),
             ('max_align_yaw', 0.35),
@@ -86,6 +95,7 @@ class ClimbFsm(Node):
         self.entry_cycles = g('entry_confirm_cycles').value
         self.exit_cycles = g('exit_confirm_cycles').value
         self.approach_speed = g('approach_speed').value
+        self.approach_timeout = g('approach_timeout').value
         self.climb_speed = g('climb_speed').value
         self.align_gain = g('align_gain').value
         self.max_align_yaw = g('max_align_yaw').value
@@ -119,6 +129,13 @@ class ClimbFsm(Node):
 
         self._passthrough = Twist()
 
+        # Stall-based riser contact. The trigger for switching into tumbling.
+        self._contact = RiserContact(stall_ratio=g('contact_stall_ratio').value,
+                                     confirm_s=g('contact_confirm_s').value)
+        self._travel_since_tick = 0.0
+        self._last_odom_xy = None
+        self._commanded_v = 0.0
+
         sensor_qos = QoSProfile(depth=5,
                                 reliability=ReliabilityPolicy.BEST_EFFORT,
                                 history=HistoryPolicy.KEEP_LAST)
@@ -129,6 +146,11 @@ class ClimbFsm(Node):
 
         self.create_subscription(String, '/terrain/state', self._on_terrain, 10)
         self.create_subscription(Imu, '/imu/data', self._on_imu, sensor_qos)
+        # Wheel odometry, valid in rolling mode, is what makes the stall
+        # visible. It deliberately is not the filtered estimate: during a climb
+        # the EKF is dead reckoning and would report motion that is not there.
+        self.create_subscription(Odometry, '/odom_wheel', self._on_wheel_odom,
+                                 sensor_qos)
         self.create_subscription(Bool, '/terrain/estop', self._on_estop, 10)
         # Navigation writes here; we gate it and republish on /cmd_vel.
         self.create_subscription(Twist, '/cmd_vel_nav', self._on_nav_cmd, 10)
@@ -168,6 +190,12 @@ class ClimbFsm(Node):
         self._vz *= 0.98          # leak, to bound integrator drift
         self._rise += self._vz * dt
 
+    def _on_wheel_odom(self, msg: Odometry):
+        xy = (msg.pose.pose.position.x, msg.pose.pose.position.y)
+        if self._last_odom_xy is not None:
+            self._travel_since_tick += math.dist(self._last_odom_xy, xy)
+        self._last_odom_xy = xy
+
     def _on_estop(self, msg: Bool):
         if msg.data and self.state in (State.ALIGN, State.APPROACH, State.CLIMB):
             self._abort('terrain e-stop')
@@ -190,6 +218,8 @@ class ClimbFsm(Node):
         self.get_logger().info(f'climb FSM {self.state.value} -> {state.value}')
         self.state = state
         self._state_entered = time.time()
+        if state in (State.ALIGN, State.APPROACH):
+            self._contact.reset()
         if state == State.CLIMB:
             self._climb_started = time.time()
             self._rise = 0.0
@@ -209,7 +239,10 @@ class ClimbFsm(Node):
     # -------------------------------------------------------------- main loop
 
     def _tick(self):
-        mode, cmd = self._step()
+        travelled = self._travel_since_tick
+        self._travel_since_tick = 0.0
+        mode, cmd = self._step(travelled)
+        self._commanded_v = cmd.linear.x
 
         m = String()
         m.data = mode
@@ -222,11 +255,12 @@ class ClimbFsm(Node):
             'requested': self._requested,
             'rise': round(self._rise, 3),
             'elapsed': round(self._elapsed(), 2),
+            'contact_evidence_s': round(self._contact.evidence_s, 2),
             'last_result': self._last_result,
         })
         self.state_pub.publish(s)
 
-    def _step(self):
+    def _step(self, travelled: float = 0.0):
         """Return (transmission_mode, cmd_vel) for this cycle."""
         t = self.terrain
         riser_ahead = bool(t.get('riser_ahead'))
@@ -264,19 +298,33 @@ class ClimbFsm(Node):
             return MODE_ROLLING, cmd
 
         if self.state == State.APPROACH:
-            if self._elapsed() > 15.0:
-                self._abort('never reached the first riser')
+            # Feed the stall detector before any early return, so evidence is
+            # not lost on the cycle that would otherwise have confirmed it.
+            in_contact = self._contact.update(
+                self._commanded_v, travelled, 1.0 / self.rate, riser_ahead)
+
+            if self._elapsed() > self.approach_timeout:
+                self._abort(
+                    'drove at the riser for '
+                    f'{self.approach_timeout:.0f} s without the wheels ever '
+                    'stalling against it, so the clusters are probably not '
+                    'reaching the step')
                 return MODE_STOPPED, Twist()
+
             if not riser_ahead and self._elapsed() > 2.0:
                 # The riser disappeared: it was a chair leg or a passing person.
                 self._last_result = 'no riser found'
                 self._requested = False
                 self._enter(State.IDLE)
                 return MODE_ROLLING, Twist()
-            if pitch > 0.08:
-                # The front clusters have started to lift: we are on the step.
+
+            # Contact is the stall. Pitch is kept as a secondary trigger for the
+            # case where the platform does ride partway up a shallow nosing, but
+            # it must never be the only one.
+            if in_contact or pitch > 0.08:
                 self._enter(State.CLIMB)
                 return MODE_TUMBLING, Twist()
+
             cmd = Twist()
             cmd.linear.x = self.approach_speed
             if skew is not None:

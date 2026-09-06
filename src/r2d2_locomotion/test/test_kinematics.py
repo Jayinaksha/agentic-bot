@@ -20,7 +20,7 @@ from r2d2_locomotion.kinematics import (  # noqa: E402
     RISER, UNKNOWN, URDF_PHASES, body_twist, carrier_hold_velocity,
     carrier_rest_phase, classify_delta, clamp, climb_envelope, flat_return,
     ground_spot_distance, height_delta, integrate_arc, joint_commands,
-    rate_limit, side_speeds, wrap_angle, wrap_to_period)
+    RiserContact, rate_limit, side_speeds, wrap_angle, wrap_to_period)
 
 # Platform constants, mirroring r2d2_description/config/robot_params.yaml.
 R_SUB = 0.050
@@ -423,3 +423,116 @@ def test_hold_velocity_is_capped_by_max_cluster_rate():
                          urdf_phases=URDF_PHASES,
                          hold_gain=100.0)
     assert max(cmd[0::4]) == pytest.approx(MAX_CLUSTER)
+
+
+# ------------------------------------------------------- riser contact
+#
+# The trigger that switches the platform from rolling to tumbling. Getting this
+# wrong is fatal in one direction and dangerous in the other: too strict and the
+# robot never starts a climb, too loose and it starts tumbling in open floor,
+# walking on its cluster corners instead of driving.
+
+CONTACT_DT = 0.05          # 20 Hz, matching climb_fsm's rate
+
+
+def _drive(detector, seconds, commanded, travelled_ratio, riser=True):
+    """Feed the detector `seconds` of driving at a given achieved/commanded ratio."""
+    fired = False
+    for _ in range(int(seconds / CONTACT_DT)):
+        fired = detector.update(commanded, commanded * travelled_ratio * CONTACT_DT,
+                                CONTACT_DT, riser) or fired
+    return fired
+
+
+def test_free_driving_never_triggers():
+    """Rolling along normally, riser in sight, must not fire."""
+    detector = RiserContact()
+    assert not _drive(detector, seconds=10.0, commanded=0.10,
+                      travelled_ratio=1.0)
+
+
+def test_a_stall_against_a_riser_triggers():
+    detector = RiserContact(confirm_s=0.6)
+    assert _drive(detector, seconds=3.0, commanded=0.10, travelled_ratio=0.0)
+
+
+def test_a_stall_takes_the_confirm_time_to_trigger():
+    """It must not fire on a single slow cycle."""
+    detector = RiserContact(confirm_s=0.6)
+    assert not _drive(detector, seconds=0.3, commanded=0.10, travelled_ratio=0.0)
+    assert _drive(detector, seconds=0.5, commanded=0.10, travelled_ratio=0.0)
+
+
+def test_a_stall_with_no_riser_in_sight_never_triggers():
+    """A wheel caught on a rug is not the bottom of a staircase."""
+    detector = RiserContact()
+    assert not _drive(detector, seconds=5.0, commanded=0.10,
+                      travelled_ratio=0.0, riser=False)
+
+
+def test_losing_sight_of_the_riser_clears_the_evidence():
+    detector = RiserContact(confirm_s=0.6)
+    _drive(detector, seconds=0.4, commanded=0.10, travelled_ratio=0.0)
+    assert detector.evidence_s > 0.0
+    detector.update(0.10, 0.0, CONTACT_DT, riser_ahead=False)
+    assert detector.evidence_s == 0.0
+
+
+def test_moving_again_restarts_the_evidence():
+    """A slow patch of carpet must not accumulate towards a false trigger."""
+    detector = RiserContact(confirm_s=0.6)
+    for _ in range(6):
+        _drive(detector, seconds=0.25, commanded=0.10, travelled_ratio=0.0)
+        _drive(detector, seconds=0.25, commanded=0.10, travelled_ratio=1.0)
+    assert detector.evidence_s == 0.0
+
+
+def test_partial_slip_is_not_a_stall():
+    """Climbing a threshold slows the robot without stopping it."""
+    detector = RiserContact(stall_ratio=0.35)
+    assert not _drive(detector, seconds=5.0, commanded=0.10,
+                      travelled_ratio=0.6)
+
+
+def test_severe_slip_is_a_stall():
+    detector = RiserContact(stall_ratio=0.35)
+    assert _drive(detector, seconds=3.0, commanded=0.10, travelled_ratio=0.15)
+
+
+def test_a_stationary_robot_does_not_trigger():
+    """No command means no evidence either way; otherwise a parked robot beside
+    a staircase would eventually decide it was against it."""
+    detector = RiserContact()
+    assert not _drive(detector, seconds=10.0, commanded=0.0, travelled_ratio=0.0)
+    assert detector.evidence_s == 0.0
+
+
+def test_reset_clears_everything():
+    detector = RiserContact()
+    _drive(detector, seconds=0.4, commanded=0.10, travelled_ratio=0.0)
+    detector.reset()
+    assert detector.evidence_s == 0.0
+
+
+def test_zero_dt_is_harmless():
+    detector = RiserContact()
+    assert detector.update(0.1, 0.0, 0.0, True) is False
+
+
+def test_the_pitch_only_trigger_would_never_have_fired():
+    """Regression for the bug this detector replaced.
+
+    With the carriers phase-locked in rolling mode, a sub-wheel meeting a riser
+    face stalls the robot without tipping it. A pitch-threshold trigger sees
+    nothing, the approach times out, and the platform never climbs a single
+    step. This asserts the stall path fires well inside that timeout.
+    """
+    detector = RiserContact(confirm_s=0.6)
+    elapsed = 0.0
+    approach_timeout = 15.0
+    while elapsed < approach_timeout:
+        pitch = 0.0                      # locked carriers: the chassis cannot tip
+        if detector.update(0.10, 0.0, CONTACT_DT, True) or pitch > 0.08:
+            break
+        elapsed += CONTACT_DT
+    assert elapsed < 1.0, 'contact must be confirmed long before the timeout'

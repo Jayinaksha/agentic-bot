@@ -243,3 +243,98 @@ def climb_envelope(cluster_circumradius: float, sub_wheel_radius: float,
         'can_mount': reach > riser,
         'tread_ok': tread > 2.0 * sub_wheel_radius,
     }
+
+
+# ---------------------------------------------------------- riser contact
+#
+# Detecting the moment the platform is against a riser and must switch to
+# tumbling.
+#
+# The obvious signal - body pitch - does not work. In rolling mode the carriers
+# are phase-locked (see carrier_hold_velocity), so a sub-wheel meeting a riser
+# face simply stops: the chassis does not tip, it stalls. Waiting for pitch means
+# waiting forever, and the approach times out having never started the climb.
+#
+# The signal that does work is the stall itself. Wheel odometry is valid in
+# rolling mode, so comparing commanded travel against achieved travel says
+# plainly whether the robot is still moving. Combined with the ToF beams
+# agreeing there is a mountable riser ahead, that is the mount trigger.
+
+class RiserContact:
+    """Confirms the platform has driven up against a riser.
+
+    Contact is declared when, for `confirm_s` of continuous evidence:
+      * both front ToF beams see a climbable riser, and
+      * achieved travel falls below `stall_ratio` of commanded travel.
+
+    Requiring both matters in each direction. Stall alone fires on a chair leg,
+    a rug, or a wheel caught on a threshold. Riser-ahead alone fires while the
+    robot is still a lookahead-distance away, and tumbling in free space walks
+    the platform forward on its cluster corners instead of driving.
+    """
+
+    __slots__ = ('stall_ratio', 'confirm_s', 'min_commanded', '_evidence_s',
+                 '_commanded', '_travelled', '_window_s')
+
+    def __init__(self, stall_ratio: float = 0.35, confirm_s: float = 0.6,
+                 min_commanded: float = 0.02):
+        self.stall_ratio = stall_ratio
+        self.confirm_s = confirm_s
+        # Below this much commanded travel in a tick there is nothing to
+        # compare against and a stall reading would be meaningless.
+        self.min_commanded = min_commanded
+        self._evidence_s = 0.0
+        self._commanded = 0.0
+        self._travelled = 0.0
+        self._window_s = 0.0
+
+    def reset(self) -> None:
+        self._evidence_s = 0.0
+        self._commanded = 0.0
+        self._travelled = 0.0
+        self._window_s = 0.0
+
+    def update(self, commanded_v: float, travelled_m: float, dt: float,
+               riser_ahead: bool) -> bool:
+        """Feed one control cycle. Returns True once contact is confirmed."""
+        if dt <= 0.0:
+            return self._evidence_s >= self.confirm_s
+
+        self._commanded += abs(commanded_v) * dt
+        self._travelled += abs(travelled_m)
+        self._window_s += dt
+
+        if not riser_ahead:
+            # Lost sight of the step: whatever the wheels are doing, this is not
+            # the bottom of a flight.
+            self.reset()
+            return False
+
+        if self._commanded < self.min_commanded:
+            # Not enough commanded travel yet to judge. Keep accumulating; the
+            # window's own elapsed time is what will be credited, so a slow
+            # creep is not penalised for taking several cycles to gather
+            # a measurable distance.
+            return False
+
+        ratio = self._travelled / self._commanded
+        if ratio < self.stall_ratio:
+            # Credit the whole window, not one tick. At 0.10 m/s and 20 Hz it
+            # takes four cycles to accumulate min_commanded, so crediting a
+            # single dt would make the detector run four times slow and the
+            # approach would time out before confirming a stall it had already
+            # seen.
+            self._evidence_s += self._window_s
+        else:
+            # Moving freely again: start the evidence over rather than letting
+            # a slow patch of carpet accumulate towards a false trigger.
+            self._evidence_s = 0.0
+        self._commanded = 0.0
+        self._travelled = 0.0
+        self._window_s = 0.0
+
+        return self._evidence_s >= self.confirm_s
+
+    @property
+    def evidence_s(self) -> float:
+        return self._evidence_s
