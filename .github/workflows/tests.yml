@@ -42,13 +42,7 @@ jobs:
 
       - name: run unit tests
         run: |
-          python -m pytest -q \
-            src/r2d2_locomotion/test \
-            src/r2d2_navigation/test \
-            src/r2d2_memory/test \
-            src/r2d2_perception/test \
-            src/r2d2_mcp/test \
-            src/r2d2_sim/test
+          python -m pytest -q src
 
   design-checks:
     name: design checks
@@ -456,18 +450,29 @@ jobs:
       - name: everything naming a tool agrees with the tools that exist
         run: python scripts/check_agent_contract.py
 
+      # The learn page carries generated diagrams and a JavaScript transcription
+      # of formulas that already exist in Python. Both are second copies, which
+      # is the shape every bug in this repo turned out to have.
+      - name: docs diagrams match the robot's constants
+        run: python scripts/generate_diagrams.py --check
+
+      - name: learn page agrees with the config it cites
+        run: python scripts/check_learn_page.py
+
       - name: referenced scripts exist
         run: |
           python - <<'EOF'
           import glob, os, re, sys
           referenced = set()
-          for pattern in ('src/**/*.py', 'src/**/*.yaml', 'docs/*.md'):
+          for pattern in ('src/**/*.py', 'src/**/*.yaml', 'docs/*.md',
+                          'docs/*.html'):
               for path in glob.glob(pattern, recursive=True):
                   try:
                       text = open(path, encoding='utf-8').read()
                   except (UnicodeDecodeError, OSError):
                       continue
-                  referenced.update(re.findall(r'scripts/[a-z_]+\.py', text))
+                  referenced.update(
+                      re.findall(r'scripts/[a-z_]+\.(?:py|sh)', text))
           missing = sorted(s for s in referenced if not os.path.exists(s))
           for script in missing:
               print(f'::error::{script} is referenced but does not exist')

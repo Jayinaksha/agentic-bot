@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300"
+     width="100%" role="img" aria-labelledby="t d" preserveAspectRatio="xMidYMid meet">
+  <title id="t">Terrain classification bands</title>
+  <desc id="d">A single axis of floor-height change, divided into four labelled regions. Below minus 60 mm is a cliff. From minus 60 to plus 35 mm is flat, which is where door sills fall. From 35 to 150 mm is a climbable riser, which is deliberately not treated as an obstacle. Above 150 mm is blocked.</desc>
+  <rect width="880" height="300" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">HOW A HEIGHT CHANGE IS CLASSIFIED</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">One axis, four outcomes. Position carries the meaning; colour and label reinforce it.</text>
+  <rect x="71.0" y="144" width="223.2" height="26" rx="3" fill="#d03b3b" opacity="0.9"/>
+  <text x="182.6" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">cliff</text>
+  <text x="182.6" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">a drop: refuse, mark the costmap</text>
+  <rect x="296.2" y="144" width="150.8" height="26" rx="3" fill="#0ca30c" opacity="0.9"/>
+  <text x="371.6" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">flat</text>
+  <text x="371.6" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">drive over it, sills included</text>
+  <rect x="449.0" y="144" width="183.0" height="26" rx="3" fill="#fab219" opacity="0.9"/>
+  <text x="540.5" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">climbable riser</text>
+  <text x="540.5" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">the route upstairs, deliberately NOT an obstacle</text>
+  <rect x="634.0" y="144" width="175.0" height="26" rx="3" fill="#ec835a" opacity="0.9"/>
+  <text x="721.5" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">blocked</text>
+  <text x="721.5" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">taller than the cluster can mount</text>
+  <line x1="70.0" y1="170.0" x2="810.0" y2="170.0" stroke="#38424E" stroke-width="1.5"/>
+  <line x1="295.2" y1="166.0" x2="295.2" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="295.2" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">-60</text>
+  <line x1="391.7" y1="166.0" x2="391.7" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="391.7" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">0</text>
+  <line x1="448.0" y1="166.0" x2="448.0" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="448.0" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">+35</text>
+  <line x1="633.0" y1="166.0" x2="633.0" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="633.0" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">+150</text>
+  <text x="810.0" y="214.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="end" font-weight="400" opacity="1.0">floor height change under the beam, mm</text>
+  <text x="24.0" y="276.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">A door sill of 18 to 30 mm sits inside "flat" on purpose; a stair riser of 150 mm sits inside "climbable riser".</text>
+
+</svg>

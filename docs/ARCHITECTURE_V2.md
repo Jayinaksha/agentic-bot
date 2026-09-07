@@ -3,6 +3,11 @@
 This document covers the v2 stack: what it is, why each piece is built the way
 it is, and — importantly — what has and has not been verified.
 
+> **Prefer it illustrated?** [`learn.html`](learn.html) covers the same ground
+> with three interactive simulations, generated diagrams, a reproduction guide
+> and a contribution map. It is a companion, not a replacement: the detail and
+> the full verification status live here.
+
 The v1 system (`brain.py`, `vlm.py`, `sementic_map.py`, `gpt_oss.py`,
 `r2d2_bridge.py`) is still in the tree and still works. v2 does not replace it
 file by file; it replaces the *approach* in four places, and those changes are

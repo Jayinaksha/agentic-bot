@@ -1,0 +1,1660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>R2-D2 Redux — Learn &amp; Reproduce</title>
+<meta name="description" content="How the tri-star stair-climbing rover works, how to reproduce it, and where to contribute. Interactive simulations driven by the robot's own constants.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Tokens lifted from index.html so this page sits inside the same system. */
+:root{
+  --ground:#0E1114; --plate:#14181D; --plate2:#1A2027;
+  --edge:#262E37;   --edge-hi:#38424E;
+  --steel:#828E9B;  --chalk:#E2E7EC;
+  --oxide:#C4552A;  --ember:#FF9A52; --sense:#7FA3B8;
+  --grid:rgba(226,231,236,.045); --code-c:#626E7C;
+  --fastener:rgba(226,231,236,.16);
+  /* Status palette, fixed by the data-viz reference. Never carries meaning
+     alone: every use here is labelled and positioned as well as coloured. */
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --shadow:0 1px 0 rgba(255,255,255,.028) inset, 0 18px 40px -28px rgba(0,0,0,.9);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--ground); color:var(--chalk);
+  font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:16px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden; padding-left:78px;
+}
+@media (max-width:900px){ body{padding-left:0} }
+
+/* ── Rail ─────────────────────────────────────────────────── */
+.rail{
+  position:fixed; left:0; top:0; bottom:0; width:78px; z-index:40;
+  background:var(--plate); border-right:1px solid var(--edge);
+  display:flex; flex-direction:column; gap:2px; padding:14px 0;
+  overflow-y:auto;
+}
+.rail-mark{
+  font-family:"Saira Condensed",sans-serif; font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--steel); writing-mode:vertical-rl;
+  margin:0 auto 16px; opacity:.7;
+}
+.rail a{
+  display:block; padding:9px 6px; text-align:center; text-decoration:none;
+  color:var(--steel); font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+  letter-spacing:.04em; border-left:2px solid transparent; transition:.15s;
+}
+.rail a:hover{color:var(--chalk); background:var(--plate2)}
+.rail a.on{color:var(--ember); border-left-color:var(--ember)}
+.rail .back{margin-top:auto; color:var(--sense)}
+@media (max-width:900px){
+  .rail{position:static; width:auto; flex-direction:row; flex-wrap:wrap;
+        border-right:0; border-bottom:1px solid var(--edge); padding:8px}
+  .rail-mark{writing-mode:horizontal-tb; margin:0 12px 0 4px}
+  .rail a{border-left:0; border-bottom:2px solid transparent}
+  .rail a.on{border-bottom-color:var(--ember)}
+  .rail .back{margin-top:0}
+}
+
+/* ── Layout ───────────────────────────────────────────────── */
+.wrap{max-width:1020px; margin:0 auto; padding:0 28px 120px}
+header.hero{padding:72px 0 40px; border-bottom:1px solid var(--edge)}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--oxide); margin:0 0 14px;
+}
+h1{
+  font-family:"Saira Condensed",sans-serif; font-weight:700; font-size:clamp(38px,6vw,66px);
+  line-height:1.02; margin:0 0 18px; letter-spacing:-.01em;
+}
+h2{
+  font-family:"Saira Condensed",sans-serif; font-weight:600;
+  font-size:clamp(24px,3.4vw,34px); line-height:1.15; margin:0 0 6px;
+  letter-spacing:.01em;
+}
+h3{font-family:"Saira Condensed",sans-serif; font-weight:600; font-size:21px; margin:30px 0 8px}
+h4{font-size:15px; margin:22px 0 6px; color:var(--chalk); font-weight:600}
+section{padding:56px 0; border-bottom:1px solid var(--edge)}
+.sec-no{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--steel);
+  letter-spacing:.16em; margin:0 0 10px;
+}
+.lede{font-size:18px; color:var(--steel); max-width:70ch; margin:0 0 8px}
+p{max-width:72ch}
+a{color:var(--sense)}
+a:hover{color:var(--ember)}
+code{
+  font-family:"IBM Plex Mono",monospace; font-size:.88em;
+  background:var(--plate2); border:1px solid var(--edge); border-radius:3px;
+  padding:1px 5px; color:var(--ember);
+}
+pre{
+  background:var(--plate); border:1px solid var(--edge); border-left:2px solid var(--oxide);
+  border-radius:4px; padding:16px 18px; overflow-x:auto; font-size:13px; line-height:1.6;
+  font-family:"IBM Plex Mono",monospace; color:var(--chalk);
+}
+pre code{background:none; border:0; padding:0; color:inherit; font-size:inherit}
+.cmt{color:var(--code-c)}
+.ok{color:var(--good)} .warn{color:var(--warning)} .bad{color:var(--critical)}
+
+/* ── Components ───────────────────────────────────────────── */
+.card{
+  background:var(--plate); border:1px solid var(--edge); border-radius:6px;
+  padding:22px 24px; box-shadow:var(--shadow);
+}
+.grid{display:grid; gap:18px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+figure{margin:26px 0; background:var(--plate); border:1px solid var(--edge); border-radius:6px; overflow:hidden}
+figure svg{display:block; width:100%; height:auto}
+figcaption{padding:12px 18px; font-size:13px; color:var(--steel); border-top:1px solid var(--edge); background:var(--plate2)}
+.tag{
+  display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10px;
+  letter-spacing:.1em; text-transform:uppercase; padding:3px 8px; border-radius:3px;
+  border:1px solid currentColor; margin-right:6px;
+}
+.t-done{color:var(--good)} .t-part{color:var(--warning)} .t-open{color:var(--critical)}
+.t-info{color:var(--sense)}
+table{border-collapse:collapse; width:100%; font-size:14px; margin:18px 0}
+th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--edge); vertical-align:top}
+th{font-family:"Saira Condensed",sans-serif; font-size:13px; letter-spacing:.06em;
+   text-transform:uppercase; color:var(--steel); font-weight:600}
+.scroll{overflow-x:auto}
+.note{
+  border-left:2px solid var(--sense); background:var(--plate); padding:14px 18px;
+  margin:20px 0; font-size:14.5px; border-radius:0 4px 4px 0;
+}
+.note.warn{border-left-color:var(--warning)}
+.note.bad{border-left-color:var(--critical)}
+.note strong{color:var(--chalk)}
+ol,ul{max-width:72ch}
+li{margin:6px 0}
+.kbd{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--steel)}
+
+/* ── Simulation panels ────────────────────────────────────── */
+.sim{background:var(--plate); border:1px solid var(--edge); border-radius:6px; margin:26px 0; overflow:hidden}
+.sim-head{padding:16px 20px 12px; border-bottom:1px solid var(--edge)}
+.sim-head h4{margin:0 0 4px; font-family:"Saira Condensed",sans-serif; font-size:18px}
+.sim-head p{margin:0; font-size:13.5px; color:var(--steel); max-width:none}
+.sim canvas{display:block; width:100%; background:var(--ground)}
+.sim-ctl{
+  display:grid; gap:12px 22px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  padding:16px 20px; border-top:1px solid var(--edge); background:var(--plate2);
+}
+.ctl label{display:block; font-size:11.5px; color:var(--steel); font-family:"IBM Plex Mono",monospace;
+           letter-spacing:.04em; margin-bottom:5px; display:flex; justify-content:space-between; gap:10px}
+.ctl label b{color:var(--ember); font-weight:500}
+.ctl input[type=range]{width:100%; accent-color:var(--oxide); background:transparent}
+.readout{
+  padding:14px 20px; border-top:1px solid var(--edge); font-family:"IBM Plex Mono",monospace;
+  font-size:12.5px; display:grid; gap:6px 20px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+}
+.readout div{display:flex; justify-content:space-between; gap:12px; border-bottom:1px dotted var(--edge); padding-bottom:4px}
+.readout span:first-child{color:var(--steel)}
+.readout span:last-child{color:var(--chalk)}
+.verdict{padding:12px 20px; font-family:"IBM Plex Mono",monospace; font-size:13px; border-top:1px solid var(--edge)}
+.btn{
+  font-family:"IBM Plex Mono",monospace; font-size:12px; background:var(--plate2);
+  color:var(--chalk); border:1px solid var(--edge-hi); border-radius:4px;
+  padding:7px 14px; cursor:pointer; letter-spacing:.04em;
+}
+.btn:hover{border-color:var(--ember); color:var(--ember)}
+
+/* ── Media slots ──────────────────────────────────────────── */
+.slot{
+  border:1px dashed var(--edge-hi); border-radius:6px; background:var(--plate);
+  padding:0; margin:20px 0; overflow:hidden;
+}
+.slot video{display:block; width:100%; background:#000}
+.slot-body{padding:18px 20px}
+.slot-body h4{margin:0 0 6px}
+.slot-empty{
+  display:flex; align-items:center; gap:12px; padding:26px 20px; color:var(--steel);
+  font-family:"IBM Plex Mono",monospace; font-size:12.5px; background:
+    repeating-linear-gradient(45deg,transparent,transparent 9px,rgba(226,231,236,.02) 9px,rgba(226,231,236,.02) 18px);
+}
+.slot-empty b{color:var(--warning); font-weight:500}
+footer{padding:48px 0 20px; color:var(--steel); font-size:13.5px}
+:focus-visible{outline:2px solid var(--ember); outline-offset:2px}
+@media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} }
+</style>
+</head>
+<body>
+<nav class="rail" aria-label="Page sections">
+  <div class="rail-mark">Learn &amp; Reproduce</div>
+  <a href="#start" class="on">00 Start</a>
+  <a href="#why">01 Why</a>
+  <a href="#geometry">02 Geometry</a>
+  <a href="#terrain">03 Terrain</a>
+  <a href="#climb">04 Climb</a>
+  <a href="#stack">05 Stack</a>
+  <a href="#reproduce">06 Repro</a>
+  <a href="#demos">07 Demos</a>
+  <a href="#contribute">08 Build</a>
+  <a href="index.html" class="back">← Main</a>
+</nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">R2-D2 Redux · v2 · companion to the main page</p>
+  <h1>Learn the robot,<br>then reproduce it.</h1>
+  <p class="lede">
+    A two-storey house is the hardest cheap-robot problem: stairs you cannot roll up,
+    floors that look identical to a planar scanner, and a budget that rules out the
+    sensors which would make it easy. This page explains how this stack answers that,
+    with simulations you can drive in the browser and a route to running it yourself.
+  </p>
+  <p style="max-width:72ch">
+    Every number on this page is read from
+    <code>robot_params.yaml</code> — the same file the URDF, the Gazebo world and the
+    navigation layer are built from. The diagrams are generated, and CI fails if they
+    drift from the code.
+  </p>
+</header>
+
+<section id="start">
+  <p class="sec-no">00 — START HERE</p>
+  <h2>What is real, and what is not</h2>
+  <p class="lede">The most useful thing this page can tell you first is what it cannot show you.</p>
+
+  <div class="grid g3" style="margin-top:26px">
+    <div class="card">
+      <p><span class="tag t-done">Verified</span></p>
+      <h4 style="margin-top:10px">The maths and the wiring</h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        275 unit tests, a climb-envelope analysis against the expanded URDF, and eleven
+        static checkers — parameters, SQL, launch files, Nav2 plugin names, sensor
+        bridging, agent tool contracts. All run in CI on every push.
+      </p>
+    </div>
+    <div class="card">
+      <p><span class="tag t-part">Partly</span></p>
+      <h4 style="margin-top:10px">The interfaces</h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        The MCP server loads against the real SDK with all 15 tools intact. The URDF
+        expands through xacro. The VLA request shape matches NVIDIA's API. None of it
+        has been driven by a live robot.
+      </p>
+    </div>
+    <div class="card">
+      <p><span class="tag t-open">Not run</span></p>
+      <h4 style="margin-top:10px">The robot</h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Nothing here has been simulated or built. Whether the cluster tracks a real
+        staircase is open, and no amount of static analysis settles it. That is the
+        first thing you will find out, and the first thing worth contributing.
+      </p>
+    </div>
+  </div>
+
+  <div class="note bad" style="margin-top:28px">
+    <strong>There are no recorded videos on this page yet, and none are faked.</strong>
+    I built this stack without access to Gazebo, a GPU or a screen recorder, so I could
+    not capture any. What I could do instead is make the physics
+    <em>runnable in your browser</em> — the three simulations below are driven by the
+    robot's actual constants, not by drawings of them. Section&nbsp;07 has a capture
+    script and empty slots ready for the real footage once you record it.
+  </div>
+
+  <h3>How to use this page</h3>
+  <table>
+    <tr><th>If you want to…</th><th>Go to</th><th>Time</th></tr>
+    <tr><td>Understand why the robot is shaped like this</td><td><a href="#why">01 Why</a> → <a href="#geometry">02 Geometry</a></td><td>10 min read</td></tr>
+    <tr><td>Feel the geometry rather than read it</td><td><a href="#geometry">02</a>, <a href="#terrain">03</a>, <a href="#climb">04</a> simulations</td><td>drag the sliders</td></tr>
+    <tr><td>Get it running on your own machine</td><td><a href="#reproduce">06 Reproduce</a></td><td>2–4 h first time</td></tr>
+    <tr><td>Record the demos that are missing</td><td><a href="#demos">07 Demos</a></td><td>1 h once it runs</td></tr>
+    <tr><td>Fix something real</td><td><a href="#contribute">08 Contribute</a></td><td>pick by size</td></tr>
+  </table>
+</section>
+
+<section id="why">
+  <p class="sec-no">01 — THE PROBLEM</p>
+  <h2>Four constraints that fight each other</h2>
+  <p class="lede">
+    Each one is easy alone. Together they eliminate almost every obvious design.
+  </p>
+
+  <div class="grid g2" style="margin-top:26px">
+    <div class="card">
+      <h4>Stairs</h4>
+      <p style="font-size:14px;margin:0">
+        A differential-drive robot cannot climb a step taller than roughly its wheel
+        radius. A 150&nbsp;mm residential riser needs a 300&nbsp;mm wheel, which will
+        not fit under a robot that also has to pass through a 900&nbsp;mm doorway.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Two floors that look alike</h4>
+      <p style="font-size:14px;margin:0">
+        The bedroom sits directly above the kitchen. One occupancy grid fuses them into
+        nonsense, so the map has to be a stack — and something has to know which layer
+        the robot is on.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Low cost, few sensors</h4>
+      <p style="font-size:14px;margin:0">
+        One 2-D LiDAR, one IMU, four <abbr title="Time-of-Flight">ToF</abbr> beams, one
+        camera — about US$150 of sensing. No depth camera, no 3-D LiDAR. A planar
+        scanner is completely blind to the floor it is driving over.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Low compute</h4>
+      <p style="font-size:14px;margin:0">
+        Everything on-robot has to run on a Raspberry-Pi-class board in real time.
+        That rules out the heavy controllers and the dense traversability pipelines
+        that would otherwise solve the terrain problem.
+      </p>
+    </div>
+  </div>
+
+  <h3>The choice that unlocked it</h3>
+  <p>
+    Four <strong>tri-star wheel clusters</strong>: a triangular carrier with three
+    small wheels at its corners. On flat ground the sub-wheels turn and the carrier is
+    held still — it behaves exactly like an ordinary wheel. On a step, the sub-wheels
+    lock and the whole carrier <em>tumbles</em> over the riser.
+  </p>
+  <p>
+    The reason this beats a legged design here is not climbing ability. It is that a
+    tri-star rover is <strong>still a differential drive at the <code>/cmd_vel</code>
+    level</strong>. Nav2, <code>slam_toolbox</code>, the laser scan matcher and the
+    existing ESP32 firmware all keep working untouched. The stair capability is bought
+    entirely in the mechanism plus one transmission switch.
+  </p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>Design</th><th>Motors</th><th>Climbs stairs</th><th>Keeps diff-drive kinematics</th><th>Cost</th></tr>
+    <tr><td>Differential drive</td><td>2</td><td class="bad">No</td><td class="ok">Yes</td><td>Low</td></tr>
+    <tr><td>Rocker-bogie</td><td>6</td><td class="warn">Poorly — riser too tall</td><td class="ok">Yes</td><td>Medium</td></tr>
+    <tr><td>RHex-style whegs</td><td>6</td><td class="ok">Yes</td><td class="bad">No — needs a phased gait</td><td>Medium</td></tr>
+    <tr><td>Tracks with flippers</td><td>4+</td><td class="ok">Yes</td><td class="ok">Yes</td><td>High</td></tr>
+    <tr><td><strong>Tri-star clusters</strong></td><td><strong>4</strong></td><td class="ok"><strong>Yes</strong></td><td class="ok"><strong>Yes</strong></td><td><strong>Low</strong></td></tr>
+  </table>
+  </div>
+  <p style="font-size:13.5px;color:var(--steel)">
+    The tri-wheel and star-wheel stair-climbing literature is the source for the
+    mechanism and for the constraint that governs it: cluster reach must exceed the
+    riser, and tread must exceed the sub-wheel diameter.
+  </p>
+</section>
+<section id="geometry">
+  <p class="sec-no">02 — GEOMETRY</p>
+  <h2>The two inequalities that decide everything</h2>
+  <p class="lede">
+    Whether this platform climbs a given staircase is not a matter of tuning. It is
+    settled by two inequalities, before any code runs.
+  </p>
+
+  <pre><code><span class="cmt"># 1. Reach must exceed the riser, or no sub-wheel can get onto the step.</span>
+reach = cluster_circumradius + sub_wheel_radius
+      = 0.115 + 0.050  =  <b>0.165 m</b>   vs a 0.150 m riser  →  10% margin
+
+<span class="cmt"># 2. Tread must exceed the sub-wheel diameter, or a cluster bridges</span>
+<span class="cmt">#    two risers instead of landing on the tread.</span>
+tread = 0.280 m  &gt;  2 x 0.050 = 0.100 m   <span class="ok">✓ 180 mm of landing room</span></code></pre>
+
+  <p>
+    Drag the sliders below. The verdict updates live, and it is the same arithmetic
+    <code>scripts/analyse_climb.py</code> runs in CI — including the third quantity,
+    <strong>gait match</strong>, which is the one this design does not satisfy cleanly.
+  </p>
+
+  <div class="sim">
+    <div class="sim-head">
+      <h4>Simulation 1 · Climb envelope</h4>
+      <p>A tri-star cluster meeting a step. Amber arc is the reach the cluster can
+         actually get a wheel onto.</p>
+    </div>
+    <canvas id="c-envelope" height="330" aria-label="Interactive diagram of a tri-star cluster against a stair step, responding to the sliders below"></canvas>
+    <div class="sim-ctl">
+      <div class="ctl"><label for="s-rclu">cluster radius <b id="v-rclu">115 mm</b></label>
+        <input type="range" id="s-rclu" min="60" max="220" value="115" step="1"></div>
+      <div class="ctl"><label for="s-rsub">sub-wheel radius <b id="v-rsub">50 mm</b></label>
+        <input type="range" id="s-rsub" min="20" max="90" value="50" step="1"></div>
+      <div class="ctl"><label for="s-riser">stair riser <b id="v-riser">150 mm</b></label>
+        <input type="range" id="s-riser" min="80" max="260" value="150" step="1"></div>
+      <div class="ctl"><label for="s-tread">stair tread <b id="v-tread">280 mm</b></label>
+        <input type="range" id="s-tread" min="140" max="400" value="280" step="1"></div>
+    </div>
+    <div class="readout" id="r-envelope"></div>
+    <div class="verdict" id="v-envelope"></div>
+  </div>
+
+  <div class="note">
+    <strong>Try this:</strong> set the riser to 200&nbsp;mm — a steep old staircase.
+    Reach fails, and no amount of software fixes it. Now raise the cluster radius until
+    it passes, and watch the <em>peak torque</em> climb with it. That trade is why this
+    robot is the size it is.
+  </div>
+
+  <h3>Where the numbers live on the robot</h3>
+  <figure>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 470"
+     width="100%" role="img" aria-labelledby="t_platform_elevation d_platform_elevation" preserveAspectRatio="xMidYMid meet">
+  <title id="t_platform_elevation">Tri-star platform side elevation</title>
+  <desc id="d_platform_elevation">Chassis 360 by 120 mm on two of four tri-star clusters. Cluster circumradius 115 mm, sub-wheel radius 50 mm, giving a reach of 165 mm. Axle sits 107.5 mm above ground. A Time-of-Flight beam leaves the front face 167.5 mm up, angled 30 degrees down, meeting the floor 290 mm ahead of the sensor.</desc>
+  <rect width="880" height="470" fill="#14181D"/>
+  <line x1="20.0" y1="360.0" x2="860.0" y2="360.0" stroke="#38424E" stroke-width="2"/>
+  <text x="24.0" y="378.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">ground</text>
+  <rect x="105.0" y="209.3" width="324.0" height="108.0" rx="4" fill="#14181D" stroke="#E2E7EC" stroke-width="2" opacity="0.95"/>
+  <text x="267.0" y="197.3" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">chassis</text>
+  <circle cx="150.0" cy="263.2" r="103.5" fill="none" stroke="#38424E" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="150.0" y1="263.2" x2="239.6" y2="315.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="239.6" cy="315.0" r="45.0" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <line x1="150.0" y1="263.2" x2="150.0" y2="159.8" stroke="#38424E" stroke-width="2"/>
+  <circle cx="150.0" cy="159.8" r="45.0" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <line x1="150.0" y1="263.2" x2="60.4" y2="315.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="60.4" cy="315.0" r="45.0" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <circle cx="150.0" cy="263.2" r="3" fill="#E2E7EC"/>
+  <text x="150.0" y="267.2" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#E2E7EC" text-anchor="start" font-weight="400" opacity="1.0"></text>
+  <circle cx="384.0" cy="263.2" r="103.5" fill="none" stroke="#38424E" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="384.0" y1="263.2" x2="473.6" y2="315.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="473.6" cy="315.0" r="45.0" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <line x1="384.0" y1="263.2" x2="384.0" y2="159.8" stroke="#38424E" stroke-width="2"/>
+  <circle cx="384.0" cy="159.8" r="45.0" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <line x1="384.0" y1="263.2" x2="294.4" y2="315.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="294.4" cy="315.0" r="45.0" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <circle cx="384.0" cy="263.2" r="3" fill="#E2E7EC"/>
+  <text x="384.0" y="267.2" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#E2E7EC" text-anchor="start" font-weight="400" opacity="1.0"></text>
+  <line x1="33.0" y1="360.0" x2="33.0" y2="263.2" stroke="#828E9B" stroke-width="1"/>
+  <circle cx="33.0" cy="360.0" r="2" fill="#828E9B"/>
+  <circle cx="33.0" cy="263.2" r="2" fill="#828E9B"/>
+  <text x="33.0" y="306.6" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">axle 107.5 mm</text>
+  <line x1="15.0" y1="263.2" x2="150.0" y2="263.2" stroke="#828E9B" stroke-width="1" stroke-dasharray="2 3"/>
+  <line x1="150.0" y1="394.0" x2="384.0" y2="394.0" stroke="#828E9B" stroke-width="1"/>
+  <circle cx="150.0" cy="394.0" r="2" fill="#828E9B"/>
+  <circle cx="384.0" cy="394.0" r="2" fill="#828E9B"/>
+  <text x="267.0" y="389.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">wheelbase 260 mm</text>
+  <circle cx="546.0" cy="209.2" r="4" fill="#7FA3B8"/>
+  <line x1="546.0" y1="209.2" x2="807.1" y2="360.0" stroke="#7FA3B8" stroke-width="2"/>
+  <circle cx="807.1" cy="360.0" r="4" fill="none" stroke="#7FA3B8" stroke-width="2"/>
+  <text x="817.1" y="350.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#7FA3B8" text-anchor="start" font-weight="400" opacity="1.0">beam spot 290 mm ahead</text>
+  <text x="554.0" y="201.2" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#7FA3B8" text-anchor="start" font-weight="400" opacity="1.0">ToF 30° down</text>
+  <line x1="572.0" y1="360.0" x2="572.0" y2="209.2" stroke="#7FA3B8" stroke-width="1"/>
+  <circle cx="572.0" cy="360.0" r="2" fill="#7FA3B8"/>
+  <circle cx="572.0" cy="209.2" r="2" fill="#7FA3B8"/>
+  <text x="572.0" y="279.6" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#7FA3B8" text-anchor="middle" font-weight="400" opacity="1.0">167.5 mm</text>
+  <line x1="384.0" y1="263.2" x2="384.0" y2="114.8" stroke="#FF9A52" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="392.0" y="108.8" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#FF9A52" text-anchor="start" font-weight="400" opacity="1.0">reach = r_cluster + r_sub = 165 mm</text>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">PLATFORM, SIDE ELEVATION</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">Drawn at the straddle rest phase the controller holds in rolling mode. Filled wheels are in contact.</text>
+
+</svg>
+    <figcaption>
+      Side elevation, generated from <code>robot_params.yaml</code>. The clusters are
+      drawn at the straddle rest phase the controller holds; filled wheels are the ones
+      touching the ground.
+    </figcaption>
+  </figure>
+
+  <h3>The bug this geometry hid</h3>
+  <p>
+    A three-spoke carrier has <strong>two</strong> rest positions, and the difference
+    between them is larger than the step the robot is trying to detect. The first
+    version of the controller held the carriers at zero <em>velocity</em>, which parks
+    them at whichever one they happened to reach.
+  </p>
+  <figure>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500"
+     width="100%" role="img" aria-labelledby="t_carrier_rest_positions d_carrier_rest_positions" preserveAspectRatio="xMidYMid meet">
+  <title id="t_carrier_rest_positions">The two carrier rest positions</title>
+  <desc id="d_carrier_rest_positions">A three-spoke carrier rests either straddling two sub-wheels, with its axle 107.5 mm above ground, or balanced on one, 165.0 mm up. The 57 mm difference exceeds the 35 mm height change the terrain monitor treats as a step, so a carrier left at zero velocity would make flat floor read as stairs.</desc>
+  <rect width="880" height="500" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">WHY THE CARRIER IS HELD AT A PHASE</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">A three-spoke carrier has two rest positions. Holding it at zero velocity parks it at whichever it reached.</text>
+  <line x1="90.0" y1="372.0" x2="390.0" y2="372.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="240" cy="280.8" r="97.6" fill="none" stroke="#38424E" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="240.0" y1="280.8" x2="324.5" y2="329.6" stroke="#38424E" stroke-width="2"/>
+  <circle cx="324.5" cy="329.6" r="42.4" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <line x1="240.0" y1="280.8" x2="240.0" y2="183.2" stroke="#38424E" stroke-width="2"/>
+  <circle cx="240.0" cy="183.2" r="42.4" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <line x1="240.0" y1="280.8" x2="155.5" y2="329.6" stroke="#38424E" stroke-width="2"/>
+  <circle cx="155.5" cy="329.6" r="42.4" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <circle cx="240" cy="280.8" r="3" fill="#E2E7EC"/>
+  <text x="240.0" y="398.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">two wheels down</text>
+  <text x="240.0" y="416.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#FF9A52" text-anchor="middle" font-weight="400" opacity="1.0">axle 107.5 mm</text>
+  <text x="240.0" y="434.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">stable, lower, and what the controller holds</text>
+  <line x1="450.0" y1="372.0" x2="750.0" y2="372.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="600" cy="232.0" r="97.6" fill="none" stroke="#38424E" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="600.0" y1="232.0" x2="600.0" y2="329.6" stroke="#38424E" stroke-width="2"/>
+  <circle cx="600.0" cy="329.6" r="42.4" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <line x1="600.0" y1="232.0" x2="684.5" y2="183.2" stroke="#38424E" stroke-width="2"/>
+  <circle cx="684.5" cy="183.2" r="42.4" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <line x1="600.0" y1="232.0" x2="515.5" y2="183.2" stroke="#38424E" stroke-width="2"/>
+  <circle cx="515.5" cy="183.2" r="42.4" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <circle cx="600" cy="232.0" r="3" fill="#E2E7EC"/>
+  <text x="600.0" y="398.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">one wheel down</text>
+  <text x="600.0" y="416.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">axle 165.0 mm</text>
+  <text x="600.0" y="434.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">unstable, 57 mm higher</text>
+  <line x1="800.0" y1="280.8" x2="800.0" y2="232.0" stroke="#C4552A" stroke-width="2"/>
+  <line x1="794.0" y1="280.8" x2="806.0" y2="280.8" stroke="#C4552A" stroke-width="2"/>
+  <line x1="794.0" y1="232.0" x2="806.0" y2="232.0" stroke="#C4552A" stroke-width="2"/>
+  <text x="788.0" y="256.4" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" fill="#C4552A" text-anchor="end" font-weight="600" opacity="1.0">57 mm</text>
+  <text x="788.0" y="272.4" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#C4552A" text-anchor="end" font-weight="400" opacity="1.0">vs 35 mm step threshold</text>
+  <text x="24.0" y="460.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#FF9A52" text-anchor="start" font-weight="600" opacity="1.0">57 mm of ride-height variation against a 35 mm step threshold.</text>
+  <text x="24.0" y="480.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">An unheld carrier makes the robot read phantom stairs on flat floor, and the climb FSM can then be triggered by nothing.</text>
+
+</svg>
+    <figcaption>
+      Found by <code>scripts/analyse_climb.py</code>, which computes both rest
+      heights and compares the gap against the ToF step threshold. Reading the
+      controller would not have shown it: the code said "hold the carrier", and it
+      did — at whichever phase it happened to stop.
+    </figcaption>
+  </figure>
+  <p>
+    The fix is a position servo onto the straddle phase, wrapping the error to the
+    carrier's 120° symmetry so it never turns more than 60° to settle. It was found by
+    <code>analyse_climb.py</code>, not by reading the code — which is the pattern for
+    almost every bug in this project.
+  </p>
+</section>
+
+<section id="terrain">
+  <p class="sec-no">03 — TERRAIN</p>
+  <h2>Seeing the floor with US$12 of sensing</h2>
+  <p class="lede">
+    A 2-D LiDAR sweeps one horizontal plane. It cannot see a step, a threshold, or the
+    edge of a landing. Four downward Time-of-Flight beams can — if you do the trigonometry
+    honestly.
+  </p>
+
+  <pre><code><span class="cmt"># On level ground a beam angled `tilt` below horizontal returns a constant:</span>
+r_flat  = h / sin(tilt)  = 0.1675 / sin(30°)  = <b>0.335 m</b>
+spot    = h / tan(tilt)  = 0.1675 / tan(30°)  = <b>0.290 m ahead</b>
+
+<span class="cmt"># A step shortens the return; a drop lengthens it. The implied height change:</span>
+dz = h - r * sin(tilt + <b>pitch</b>)</code></pre>
+
+  <div class="note warn">
+    <strong>That <code>pitch</code> term is not optional.</strong> On the 12.1° ramp in
+    the test house the robot pitches nose-up, lengthening every return. Without the
+    correction that reads as a continuous cliff, and the robot refuses to use the ramp
+    at all. There is a regression test named for exactly this.
+  </div>
+
+  <div class="sim">
+    <div class="sim-head">
+      <h4>Simulation 2 · What the beam sees</h4>
+      <p>Move the floor under the beam and watch the classification. Then add body
+         pitch and watch the naive reading break while the corrected one holds.</p>
+    </div>
+    <canvas id="c-tof" height="300" aria-label="Interactive diagram of a Time-of-Flight beam measuring a floor height change, with and without pitch correction"></canvas>
+    <div class="sim-ctl">
+      <div class="ctl"><label for="s-dz">floor height change <b id="v-dz">0 mm</b></label>
+        <input type="range" id="s-dz" min="-200" max="260" value="0" step="1"></div>
+      <div class="ctl"><label for="s-pitch">body pitch <b id="v-pitch">0.0°</b></label>
+        <input type="range" id="s-pitch" min="-200" max="200" value="0" step="1"></div>
+      <div class="ctl" style="align-self:end">
+        <button class="btn" id="b-preset-sill">door sill (22 mm)</button></div>
+      <div class="ctl" style="align-self:end">
+        <button class="btn" id="b-preset-ramp">on the 12° ramp</button></div>
+    </div>
+    <div class="readout" id="r-tof"></div>
+    <div class="verdict" id="v-tof"></div>
+  </div>
+
+  <h3>The four outcomes</h3>
+  <figure>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300"
+     width="100%" role="img" aria-labelledby="t_terrain_bands d_terrain_bands" preserveAspectRatio="xMidYMid meet">
+  <title id="t_terrain_bands">Terrain classification bands</title>
+  <desc id="d_terrain_bands">A single axis of floor-height change, divided into four labelled regions. Below minus 60 mm is a cliff. From minus 60 to plus 35 mm is flat, which is where door sills fall. From 35 to 150 mm is a climbable riser, which is deliberately not treated as an obstacle. Above 150 mm is blocked.</desc>
+  <rect width="880" height="300" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">HOW A HEIGHT CHANGE IS CLASSIFIED</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">One axis, four outcomes. Position carries the meaning; colour and label reinforce it.</text>
+  <rect x="71.0" y="144" width="223.2" height="26" rx="3" fill="#d03b3b" opacity="0.9"/>
+  <text x="182.6" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">cliff</text>
+  <text x="182.6" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">a drop: refuse, mark the costmap</text>
+  <rect x="296.2" y="144" width="150.8" height="26" rx="3" fill="#0ca30c" opacity="0.9"/>
+  <text x="371.6" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">flat</text>
+  <text x="371.6" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">drive over it, sills included</text>
+  <rect x="449.0" y="144" width="183.0" height="26" rx="3" fill="#fab219" opacity="0.9"/>
+  <text x="540.5" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">climbable riser</text>
+  <text x="540.5" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">the route upstairs, deliberately NOT an obstacle</text>
+  <rect x="634.0" y="144" width="175.0" height="26" rx="3" fill="#ec835a" opacity="0.9"/>
+  <text x="721.5" y="136.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">blocked</text>
+  <text x="721.5" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">taller than the cluster can mount</text>
+  <line x1="70.0" y1="170.0" x2="810.0" y2="170.0" stroke="#38424E" stroke-width="1.5"/>
+  <line x1="295.2" y1="166.0" x2="295.2" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="295.2" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">-60</text>
+  <line x1="391.7" y1="166.0" x2="391.7" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="391.7" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">0</text>
+  <line x1="448.0" y1="166.0" x2="448.0" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="448.0" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">+35</text>
+  <line x1="633.0" y1="166.0" x2="633.0" y2="175.0" stroke="#E2E7EC" stroke-width="1.5"/>
+  <text x="633.0" y="187.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#E2E7EC" text-anchor="middle" font-weight="400" opacity="1.0">+150</text>
+  <text x="810.0" y="214.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="end" font-weight="400" opacity="1.0">floor height change under the beam, mm</text>
+  <text x="24.0" y="276.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">A door sill of 18 to 30 mm sits inside "flat" on purpose; a stair riser of 150 mm sits inside "climbable riser".</text>
+
+</svg>
+    <figcaption>
+      One axis, four labelled regions. Note that a climbable riser is deliberately
+      <em>not</em> published as a costmap obstacle — marking it would make Nav2 plan
+      around the one feature the platform was built to use.
+    </figcaption>
+  </figure>
+
+  <div class="note">
+    <strong>Why the beams are angled 30°, not 45°:</strong> at 45° the spot lands
+    60&nbsp;mm ahead of the sensor — inside the robot's own footprint, far too late to
+    react. At 30° from a 167.5&nbsp;mm mount it lands 290&nbsp;mm ahead, roughly one
+    cluster-diameter of warning. That distance is also what sets the descent creep,
+    which is the only thing standing between the robot and the bottom of the stairs.
+  </div>
+</section>
+<section id="climb">
+  <p class="sec-no">04 — THE CLIMB</p>
+  <h2>Two transmission modes, and the moment between them</h2>
+  <p class="lede">
+    The whole stair capability is one switch — and the hardest part is knowing
+    <em>when</em> to throw it.
+  </p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h4 style="color:var(--sense)">ROLLING</h4>
+      <p style="font-size:14px;margin:0 0 8px">
+        Sub-wheels driven, carriers <strong>held at the straddle phase</strong>.
+        Contact radius is 50&nbsp;mm. Behaves as an ordinary wheel.
+      </p>
+      <p style="font-size:14px;margin:0;color:var(--good)">Wheel odometry is valid.</p>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--ember)">TUMBLING</h4>
+      <p style="font-size:14px;margin:0 0 8px">
+        Carriers driven, sub-wheels locked. The contact point walks around the
+        carrier as it rotates over the riser.
+      </p>
+      <p style="font-size:14px;margin:0;color:var(--critical)">
+        Wheel odometry is meaningless — there is no fixed contact radius.
+      </p>
+    </div>
+  </div>
+
+  <p style="margin-top:22px">
+    That second line drives a surprising amount of the rest of the stack. The
+    controller publishes <code>/odom_wheel</code> with a covariance of 1e6 and a
+    <code>valid: false</code> flag rather than a plausible number the EKF would
+    happily fuse. The odometry supervisor drops the scan matcher too — a planar
+    scanner pitched 28° up a staircase is looking at the ceiling and returns
+    confident, wrong matches. What is left is dead reckoning on an IMU, which is
+    why the floor manager re-seeds the pose at the head of the flight on arrival.
+  </p>
+
+  <h3>The trigger that could never have fired</h3>
+  <p>
+    The first version switched into tumbling when body pitch exceeded a threshold —
+    on the reasoning that the front clusters lifting is what starting a climb looks
+    like. But with the carriers phase-locked they <em>cannot</em> lift. A sub-wheel
+    meeting a riser face stalls the robot; the chassis stays level. The threshold
+    never fired, the approach ran its full 15&nbsp;s timeout driving into the step,
+    and the FSM aborted. <strong>The robot would not have climbed one stair.</strong>
+  </p>
+  <p>
+    The signal that does work is the stall itself. Wheel odometry is valid in rolling
+    mode, so contact is declared when both front beams see a riser <em>and</em>
+    achieved travel stays below 35% of commanded for 0.6&nbsp;s. Both halves matter:
+    a stall alone fires on a chair leg or a rug; riser-ahead alone fires while the
+    robot is still a lookahead away, where tumbling walks it forward on its cluster
+    corners instead of driving.
+  </p>
+
+  <div class="sim">
+    <div class="sim-head">
+      <h4>Simulation 3 · Transmission and the stall trigger</h4>
+      <p>Drive the robot at the step. Watch the two candidate triggers — pitch and
+         stall — and see which one ever fires.</p>
+    </div>
+    <canvas id="c-climb" height="320" aria-label="Interactive simulation of a robot approaching a stair riser, comparing a body-pitch trigger against a wheel-stall trigger"></canvas>
+    <div class="sim-ctl">
+      <div class="ctl" style="align-self:end">
+        <button class="btn" id="b-climb-run">▶ approach the step</button></div>
+      <div class="ctl" style="align-self:end">
+        <button class="btn" id="b-climb-reset">reset</button></div>
+      <div class="ctl"><label for="s-hold">carrier phase hold <b id="v-hold">on</b></label>
+        <input type="range" id="s-hold" min="0" max="1" value="1" step="1"></div>
+      <div class="ctl"><label for="s-speed">approach speed <b id="v-speed">0.10 m/s</b></label>
+        <input type="range" id="s-speed" min="4" max="30" value="10" step="1"></div>
+    </div>
+    <div class="readout" id="r-climb"></div>
+    <div class="verdict" id="v-climb"></div>
+  </div>
+
+  <div class="note warn">
+    <strong>Turn the phase hold off</strong> and watch the ride height wander. That
+    is the 57&nbsp;mm band from section 02 — and the terrain monitor starts reporting
+    risers that are not there.
+  </div>
+
+  <h3>Going back down is not the same problem</h3>
+  <p>
+    Ascending, the riser stops the platform and the stall is an unambiguous
+    <em>you are here</em>. Descending there is no such event: the beams see the drop
+    while the wheels are still on solid floor, and a robot that keeps rolling drives
+    off the top step. The last stretch is therefore dead-reckoned from geometry:
+  </p>
+  <pre><code>creep = (tof_forward_offset + spot_ahead) − wheelbase/2 − margin
+      = (0.180 + 0.290) − 0.130 − 0.05
+      = <b>0.290 m</b>
+
+<span class="cmt"># Every term is measurable with a tape on the real robot. Nothing here</span>
+<span class="cmt"># depends on a threshold tuned by trial on a staircase.</span></code></pre>
+  <div class="note bad">
+    <strong>Descent ships disabled</strong> (<code>allow_descent: false</code>). It
+    has not been validated on hardware or in simulation and the failure mode is the
+    robot falling down a flight of stairs. With it off the FSM refuses explicitly, and
+    the MCP layer checks the whole route <em>before</em> setting off — so you find out
+    in the kitchen, not on the landing.
+  </div>
+
+  <figure>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 400"
+     width="100%" role="img" aria-labelledby="t_climb_fsm d_climb_fsm" preserveAspectRatio="xMidYMid meet">
+  <title id="t_climb_fsm">The climb state machine</title>
+  <desc id="d_climb_fsm">Six states: IDLE, ALIGN, APPROACH, CLIMB, SETTLE and ABORT. A request moves IDLE to ALIGN. Squaring up moves ALIGN to APPROACH. A wheel stall moves APPROACH to CLIMB. Level attitude moves CLIMB to SETTLE, then back to IDLE. A timeout, a stall in the climb, or an emergency stop moves any active state to ABORT and back to IDLE.</desc>
+  <rect width="880" height="400" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">THE CLIMB STATE MACHINE</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">Direction is read from the terrain, not the request: a riser ahead means up, a drop means down.</text>
+  <rect x="60" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#E2E7EC" stroke-width="1.8"/>
+  <text x="130.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">IDLE</text>
+  <text x="130.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">rolling; passes</text>
+  <text x="130.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">commands through</text>
+  <rect x="215" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.8"/>
+  <text x="285.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#7FA3B8" text-anchor="middle" font-weight="600" opacity="1.0">ALIGN</text>
+  <text x="285.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">square up on</text>
+  <text x="285.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">ToF skew</text>
+  <rect x="370" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.8"/>
+  <text x="440.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#7FA3B8" text-anchor="middle" font-weight="600" opacity="1.0">APPROACH</text>
+  <text x="440.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">creep until</text>
+  <text x="440.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">the wheels stall</text>
+  <rect x="525" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#FF9A52" stroke-width="1.8"/>
+  <text x="595.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#FF9A52" text-anchor="middle" font-weight="600" opacity="1.0">CLIMB</text>
+  <text x="595.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">tumbling;</text>
+  <text x="595.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">IMU-integrated rise</text>
+  <rect x="680" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#E2E7EC" stroke-width="1.8"/>
+  <text x="750.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">SETTLE</text>
+  <text x="750.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">rolling; hold</text>
+  <text x="750.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">for relocalisation</text>
+  <rect x="370" y="290" width="140" height="66" rx="6" fill="#0E1114" stroke="#d03b3b" stroke-width="1.8"/>
+  <text x="440.0" y="314.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#d03b3b" text-anchor="middle" font-weight="600" opacity="1.0">ABORT</text>
+  <text x="440.0" y="331.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">reverse clear,</text>
+  <text x="440.0" y="344.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">latch the reason</text>
+  <line x1="200.0" y1="183.0" x2="215.0" y2="183.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="215" cy="183" r="3.5" fill="#828E9B"/>
+  <text x="207.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">request</text>
+  <line x1="355.0" y1="183.0" x2="370.0" y2="183.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="370" cy="183" r="3.5" fill="#828E9B"/>
+  <text x="362.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">square</text>
+  <line x1="510.0" y1="183.0" x2="525.0" y2="183.0" stroke="#FF9A52" stroke-width="1.6"/>
+  <circle cx="525" cy="183" r="3.5" fill="#FF9A52"/>
+  <text x="517.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#FF9A52" text-anchor="middle" font-weight="400" opacity="1.0">stall</text>
+  <line x1="665.0" y1="183.0" x2="680.0" y2="183.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="680" cy="183" r="3.5" fill="#828E9B"/>
+  <text x="672.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">level</text>
+  <line x1="750.0" y1="150.0" x2="750.0" y2="120.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="750" cy="120" r="3.5" fill="#828E9B"/>
+  <line x1="750.0" y1="120.0" x2="130.0" y2="120.0" stroke="#828E9B" stroke-width="1.6"/>
+  <line x1="130.0" y1="120.0" x2="130.0" y2="150.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="130" cy="150" r="3.5" fill="#828E9B"/>
+  <text x="130.0" y="127.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">done</text>
+  <line x1="440.0" y1="216.0" x2="440.0" y2="290.0" stroke="#d03b3b" stroke-width="1.6"/>
+  <circle cx="440" cy="290" r="3.5" fill="#d03b3b"/>
+  <text x="440.0" y="267.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#d03b3b" text-anchor="middle" font-weight="400" opacity="1.0">timeout / stall / e-stop</text>
+  <line x1="370.0" y1="323.0" x2="130.0" y2="323.0" stroke="#d03b3b" stroke-width="1.6"/>
+  <line x1="130.0" y1="323.0" x2="130.0" y2="216.0" stroke="#d03b3b" stroke-width="1.6"/>
+  <circle cx="130" cy="216" r="3.5" fill="#d03b3b"/>
+  <text x="24.0" y="366.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#FF9A52" text-anchor="start" font-weight="400" opacity="1.0">APPROACH confirms contact from a STALL, not from body pitch: with the carriers phase-locked the chassis cannot tip, so a pitch threshold would never fire.</text>
+  <text x="24.0" y="384.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">Contact = both front beams see a riser AND travel falls below 35% of commanded, for 0.6 s.</text>
+
+</svg>
+    <figcaption>
+      The state machine. Direction is read from the terrain rather than the request:
+      a riser ahead means up, a drop means down, neither means there is no staircase
+      here to use.
+    </figcaption>
+  </figure>
+
+  <figure>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 430"
+     width="100%" role="img" aria-labelledby="t_staircase_geometry d_staircase_geometry" preserveAspectRatio="xMidYMid meet">
+  <title id="t_staircase_geometry">Staircase against the cluster geometry</title>
+  <desc id="d_staircase_geometry">A 150 mm riser with a 280 mm tread. The cluster reach of 165 mm clears the riser by 10 percent. One 120 degree carrier rotation advances 199 mm against a step pitch of 318 mm, a ratio of 0.63, so the cluster does not walk exactly one step per rotation.</desc>
+  <rect width="880" height="430" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">THE FLIGHT, AGAINST THE CLUSTER</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">First 5 of 12 steps. Every dimension below comes from robot_params.yaml.</text>
+  <rect x="90.0" y="267.0" width="173.6" height="93.0" fill="#0E1114" stroke="#38424E" stroke-width="1.5"/>
+  <rect x="263.6" y="174.0" width="173.6" height="186.0" fill="#0E1114" stroke="#38424E" stroke-width="1.5"/>
+  <rect x="437.2" y="81.0" width="173.6" height="279.0" fill="#0E1114" stroke="#38424E" stroke-width="1.5"/>
+  <rect x="610.8" y="-12.0" width="173.6" height="372.0" fill="#0E1114" stroke="#38424E" stroke-width="1.5"/>
+  <rect x="784.4" y="-105.0" width="173.6" height="465.0" fill="#0E1114" stroke="#38424E" stroke-width="1.5"/>
+  <line x1="20.0" y1="360.0" x2="90.0" y2="360.0" stroke="#38424E" stroke-width="2"/>
+  <line x1="52.8" y1="360.0" x2="52.8" y2="267.0" stroke="#828E9B" stroke-width="1"/>
+  <circle cx="52.8" cy="360.0" r="2" fill="#828E9B"/>
+  <circle cx="52.8" cy="267.0" r="2" fill="#828E9B"/>
+  <text x="52.8" y="308.5" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">riser 150</text>
+  <line x1="90.0" y1="251.0" x2="263.6" y2="251.0" stroke="#828E9B" stroke-width="1"/>
+  <circle cx="90.0" cy="251.0" r="2" fill="#828E9B"/>
+  <circle cx="263.6" cy="251.0" r="2" fill="#828E9B"/>
+  <text x="176.8" y="246.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">tread 280</text>
+  <path d="M 90.0 164.7 A 102.3 102.3 0 0 1 192.3 267.0" fill="none" stroke="#FF9A52" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="102.0" y="156.7" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#FF9A52" text-anchor="start" font-weight="400" opacity="1.0">reach 165 mm > riser 150 mm (10% margin)</text>
+  <line x1="90.0" y1="404.0" x2="286.9" y2="404.0" stroke="#828E9B" stroke-width="1"/>
+  <text x="294.9" y="408.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">step pitch 318 mm</text>
+  <line x1="90.0" y1="424.0" x2="213.5" y2="424.0" stroke="#C4552A" stroke-width="2.5"/>
+  <text x="221.5" y="428.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#C4552A" text-anchor="start" font-weight="400" opacity="1.0">one 120° tumble advances 199 mm (ratio 0.63)</text>
+  <text x="24.0" y="414.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">The cluster does not walk one step per rotation. It still climbs; the gait is lumpy, and Gazebo has to settle whether that matters.</text>
+
+</svg>
+    <figcaption>
+      The open question. One 120° tumble advances 199&nbsp;mm against a 318&nbsp;mm
+      step pitch — the cluster does not walk one step per rotation. It still climbs;
+      whether the resulting gait tracks a real flight is what Gazebo has to settle.
+    </figcaption>
+  </figure>
+</section>
+
+<section id="stack">
+  <p class="sec-no">05 — THE STACK</p>
+  <h2>Eight packages, and one rule about the wheels</h2>
+
+  <figure>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 470"
+     width="100%" role="img" aria-labelledby="t_command_path d_command_path" preserveAspectRatio="xMidYMid meet">
+  <title id="t_command_path">The velocity command path</title>
+  <desc id="d_command_path">Nav2 writes to velocity_smoother, then collision_monitor, then cmd_vel_nav. The climb FSM is the sole writer of cmd_vel, which reaches tristar_controller and becomes sixteen joint velocities. precise_docking also writes cmd_vel_nav, and terrain_monitor can stop the FSM.</desc>
+  <rect width="880" height="470" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">THE COMMAND PATH</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">One writer to /cmd_vel, enforced in CI. Nothing can take the platform away from the climb FSM mid-staircase.</text>
+  <rect x="60" y="100" width="210" height="52" rx="5" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.6"/>
+  <text x="72.0" y="122.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">Nav2</text>
+  <text x="72.0" y="139.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#7FA3B8" text-anchor="start" font-weight="400" opacity="1.0">controller_server</text>
+  <rect x="60" y="170" width="210" height="52" rx="5" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.6"/>
+  <text x="72.0" y="192.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">velocity_smoother</text>
+  <text x="72.0" y="209.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#7FA3B8" text-anchor="start" font-weight="400" opacity="1.0">/cmd_vel_smoothed</text>
+  <rect x="60" y="240" width="210" height="52" rx="5" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.6"/>
+  <text x="72.0" y="262.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">collision_monitor</text>
+  <text x="72.0" y="279.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#7FA3B8" text-anchor="start" font-weight="400" opacity="1.0">/cmd_vel_nav</text>
+  <rect x="330" y="240" width="230" height="52" rx="5" fill="#0E1114" stroke="#FF9A52" stroke-width="1.6"/>
+  <text x="342.0" y="262.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">climb_fsm</text>
+  <text x="342.0" y="279.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#FF9A52" text-anchor="start" font-weight="400" opacity="1.0">the only writer</text>
+  <rect x="620" y="240" width="210" height="52" rx="5" fill="#0E1114" stroke="#E2E7EC" stroke-width="1.6"/>
+  <text x="632.0" y="262.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">tristar_controller</text>
+  <text x="632.0" y="279.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#E2E7EC" text-anchor="start" font-weight="400" opacity="1.0">/cmd_vel</text>
+  <rect x="620" y="340" width="210" height="52" rx="5" fill="#0E1114" stroke="#828E9B" stroke-width="1.6"/>
+  <text x="632.0" y="362.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">16 joint velocities</text>
+  <text x="632.0" y="379.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">ros2_control</text>
+  <rect x="330" y="100" width="230" height="52" rx="5" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.6"/>
+  <text x="342.0" y="122.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">precise_docking</text>
+  <text x="342.0" y="139.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#7FA3B8" text-anchor="start" font-weight="400" opacity="1.0">also writes /cmd_vel_nav</text>
+  <rect x="330" y="350" width="230" height="52" rx="5" fill="#0E1114" stroke="#C4552A" stroke-width="1.6"/>
+  <text x="342.0" y="372.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">terrain_monitor</text>
+  <text x="342.0" y="389.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#C4552A" text-anchor="start" font-weight="400" opacity="1.0">gates via /terrain/estop</text>
+  <line x1="165.0" y1="152.0" x2="165.0" y2="170.0" stroke="#38424E" stroke-width="1.6"/>
+  <circle cx="165" cy="170" r="3.5" fill="#38424E"/>
+  <line x1="165.0" y1="222.0" x2="165.0" y2="240.0" stroke="#38424E" stroke-width="1.6"/>
+  <circle cx="165" cy="240" r="3.5" fill="#38424E"/>
+  <line x1="270.0" y1="266.0" x2="330.0" y2="266.0" stroke="#38424E" stroke-width="1.6"/>
+  <circle cx="330" cy="266" r="3.5" fill="#38424E"/>
+  <line x1="560.0" y1="266.0" x2="620.0" y2="266.0" stroke="#38424E" stroke-width="1.6"/>
+  <circle cx="620" cy="266" r="3.5" fill="#38424E"/>
+  <line x1="725.0" y1="292.0" x2="725.0" y2="340.0" stroke="#38424E" stroke-width="1.6"/>
+  <circle cx="725" cy="340" r="3.5" fill="#38424E"/>
+  <line x1="445.0" y1="152.0" x2="445.0" y2="240.0" stroke="#7FA3B8" stroke-width="1.6"/>
+  <circle cx="445" cy="240" r="3.5" fill="#7FA3B8"/>
+  <line x1="445.0" y1="350.0" x2="445.0" y2="292.0" stroke="#C4552A" stroke-width="1.6"/>
+  <circle cx="445" cy="292" r="3.5" fill="#C4552A"/>
+  <rect x="330" y="205" width="230" height="26" rx="3" fill="#FF9A52" opacity="0.12"/>
+  <text x="445.0" y="222.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="11" fill="#FF9A52" text-anchor="middle" font-weight="400" opacity="1.0">gate: passes through, or substitutes</text>
+  <text x="24.0" y="450.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">In IDLE the FSM republishes navigation’s command unchanged. In every other state it substitutes its own and switches the transmission.</text>
+
+</svg>
+    <figcaption>
+      <code>climb_fsm</code> is the sole writer of <code>/cmd_vel</code> and
+      <code>/locomotion/mode</code>. CI asserts it on every push — two writers on one
+      command topic is the failure mode that silently breaks a ROS stack, and a launch
+      file will not tell you.
+    </figcaption>
+  </figure>
+
+  <div class="scroll">
+  <table>
+    <tr><th>Package</th><th>Does</th><th>The interesting decision</th></tr>
+    <tr><td><code>r2d2_description</code></td><td>URDF/xacro for the platform</td>
+        <td>Every dimension derives from one YAML the world generator also reads</td></tr>
+    <tr><td><code>r2d2_sim</code></td><td>Two-storey house, Gazebo bring-up</td>
+        <td>World is <em>generated</em>; it refuses to emit stairs the robot cannot mount</td></tr>
+    <tr><td><code>r2d2_locomotion</code></td><td>Drive, terrain, climb FSM</td>
+        <td>Kinematics live in a ROS-free module so the maths is testable without ROS</td></tr>
+    <tr><td><code>r2d2_localization</code></td><td>EKF, regime gating, floors</td>
+        <td>Regime switch applied through covariance, since the EKF can't be reconfigured live</td></tr>
+    <tr><td><code>r2d2_navigation</code></td><td>Nav2, routing, docking</td>
+        <td>Docking servos on the live scan, so map error drops out of the loop</td></tr>
+    <tr><td><code>r2d2_perception</code></td><td>VLA grounding</td>
+        <td>Reports its own grounding quality instead of guessing a coordinate</td></tr>
+    <tr><td><code>r2d2_memory</code></td><td>Ledger + pgvector</td>
+        <td>JetStream is the truth; Postgres is a projection you can rebuild by replay</td></tr>
+    <tr><td><code>r2d2_mcp</code></td><td>Robot as MCP tools + agent</td>
+        <td>Tools return the real outcome, so the model learns what actually happened</td></tr>
+  </table>
+  </div>
+
+  <h3>Why MCP instead of asking for JSON</h3>
+  <p>
+    The previous planner put a JSON schema in the prompt, asked a model to emit one
+    object containing a whole plan, repaired it with heuristics, and executed it
+    open-loop. Three things were wrong, and tools fix all three.
+  </p>
+  <div class="scroll">
+  <table>
+    <tr><th></th><th>One-shot JSON</th><th>MCP tools</th></tr>
+    <tr><td>Feedback</td><td class="bad">Plan emitted before the first wheel turned</td>
+        <td class="ok">Each call returns the real outcome and a reason</td></tr>
+    <tr><td>Parsing</td><td class="bad"><code>repair_json</code> may execute something else</td>
+        <td class="ok">Schema-validated before anything moves</td></tr>
+    <tr><td>Capability drift</td><td class="bad">Prompt carried the whole surface, grew forever</td>
+        <td class="ok">Server describes its own tools; CI checks nothing goes stale</td></tr>
+  </table>
+  </div>
+  <pre><code><span class="cmt"># What a failed navigation actually returns to the model now:</span>
+{
+  "success": false,
+  "reason": "a step too tall for the wheel clusters to mount is in the way;
+             the route needs to avoid it",
+  "distance_remaining_m": 1.84
+}</code></pre>
+  <p style="font-size:14px;color:var(--steel)">
+    The terrain monitor and odometry supervisor usually know exactly why Nav2 gave up,
+    and that is far more useful to a language model than <code>goal aborted</code>.
+  </p>
+</section>
+<section id="reproduce">
+  <p class="sec-no">06 — REPRODUCE</p>
+  <h2>Run it yourself</h2>
+  <p class="lede">
+    In order. Each step has something you should actually see — if you do not see it,
+    stop there rather than pressing on.
+  </p>
+
+  <h3>Step 0 · Check the geometry closes (30 seconds, no ROS)</h3>
+  <p>Do this first after changing any dimension. It catches things a simulator only
+     shows you as an unexplained failure to climb.</p>
+  <pre><code>git clone https://github.com/Jayinaksha/agentic-bot
+cd agentic-bot
+pip install pyyaml xacro pytest pyflakes
+
+python3 scripts/analyse_climb.py
+python3 -m pytest -q src/r2d2_*/test</code></pre>
+  <p><span class="tag t-info">Expect</span> 9 checks, 0 failed, 2 warnings (gait match
+     and peak torque, both documented and deliberate); 275 tests passing.</p>
+
+  <h3>Step 1 · Is the robot the right shape?</h3>
+  <pre><code>colcon build --symlink-install &amp;&amp; source install/setup.bash
+ros2 launch r2d2_description display.launch.py</code></pre>
+  <p><span class="tag t-info">Expect</span> RViz with four tri-star clusters, a LiDAR
+     on a short mast, four ToF frames at the corners and a trailing tail. If a cluster
+     is inside-out, the phase offsets in the xacro are wrong.</p>
+
+  <h3>Step 2 · Does it spawn and settle?</h3>
+  <pre><code>ros2 launch r2d2_sim sim.launch.py</code></pre>
+  <p><span class="tag t-info">Expect</span> the robot drops ~90&nbsp;mm and settles with
+     two sub-wheels per cluster on the ground, chassis level, axle near 107.5&nbsp;mm.
+     If it sinks or jitters, that is contact stiffness — the first thing to tune.</p>
+  <div class="note">
+    <strong>This is where the real work starts.</strong> Contact-rich tumbling is
+    exactly what simulators get wrong. The physics block is already set to a 1&nbsp;ms
+    step with a stiff solver for this reason, and you should expect to spend time on
+    <code>max_step_size</code>, friction and solver iterations before it climbs cleanly.
+  </div>
+
+  <h3>Step 3 · Teleop on flat ground, then calibrate</h3>
+  <pre><code>ros2 launch r2d2_navigation house_stack.launch.py mode:=slam
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/cmd_vel_nav
+
+<span class="cmt"># Then measure the skid-steer scrub instead of trusting the 1.25 estimate:</span>
+python3 scripts/calibrate_slip.py</code></pre>
+  <p><span class="tag t-info">Expect</span> the chassis to hold a steady ride height.
+     If it bobs, the carrier hold is not working and every ToF threshold is void.</p>
+
+  <h3>Step 4 · The staircase</h3>
+  <pre><code><span class="cmt"># Drive to the foot of the flight (x ≈ 0.9, y ≈ 0.55), face +x, then:</span>
+ros2 topic pub --once /climb/request std_msgs/Bool "{data: true}"
+ros2 topic echo /climb/state</code></pre>
+  <p><span class="tag t-info">Expect</span> <code>idle → align → approach → climb →
+     settle → idle</code> with a rise near 1.80&nbsp;m. <span class="tag t-open">Untested</span>
+     — this is the step nobody has run, and the one worth reporting on either way.</p>
+
+  <h3>Step 5 · Map both floors, then navigate</h3>
+  <pre><code>ros2 launch r2d2_localization slam.launch.py floor:=0
+<span class="cmt"># drive the floor, then:</span>
+ros2 run nav2_map_server map_saver_cli -f ~/r2d2_maps/house_f0
+<span class="cmt"># repeat with floor:=1, then switch to localisation:</span>
+ros2 launch r2d2_navigation house_stack.launch.py mode:=amcl</code></pre>
+
+  <h3>Step 6 · Memory and perception</h3>
+  <pre><code>docker compose -f src/r2d2_memory/docker-compose.yml up -d
+python3 scripts/check_memory.py          <span class="cmt"># verify before wiring it in</span>
+
+export R2D2_NVIDIA_API_KEY=nvapi-...
+ros2 launch r2d2_perception perception.launch.py</code></pre>
+
+  <h3>Step 7 · Talk to it</h3>
+  <pre><code>pip install mcp httpx
+python3 -m r2d2_mcp.agent --dry-run "go to the kitchen and tell me what is on the table"</code></pre>
+  <p><span class="tag t-info">Expect</span> the agent to call <code>get_state</code> and
+     <code>find_object</code> for real, and refuse to move. Drop <code>--dry-run</code>
+     only once the dry run reads sensibly.</p>
+
+  <div class="note warn">
+    <strong>Nav2 Jazzy or newer.</strong> The plugin names use the <code>::</code> style
+    Nav2 standardised on in Jazzy. On Humble every plugin here fails to load — silently,
+    with no warning. <code>python3 scripts/check_nav2_plugins.py --distro humble</code>
+    lists what would need changing.
+  </div>
+</section>
+
+<section id="demos">
+  <p class="sec-no">07 — DEMOS</p>
+  <h2>The footage that should live here</h2>
+  <p class="lede">
+    These slots are empty on purpose. I had no simulator, GPU or screen recorder, so
+    rather than fake them I built the capture kit and left the frames ready.
+  </p>
+
+  <pre><code><span class="cmt"># Records a demo to docs/media/ with the right name and encoding.</span>
+<span class="cmt"># Drop the file in and the slot below fills itself in — no HTML to edit.</span>
+bash scripts/record_demo.sh --list
+bash scripts/record_demo.sh climb-ascent</code></pre>
+
+  <div class="slot" data-media="climb-ascent">
+    <div class="slot-body">
+      <h4>01 · The ascent <span class="tag t-open">needed</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Gazebo, side view, from the foot of the flight to the landing. The single most
+        valuable clip: it settles the gait-match question that static analysis cannot.
+        Show <code>/climb/state</code> in a terminal beside it.
+      </p>
+    </div>
+  </div>
+
+  <div class="slot" data-media="carrier-hold">
+    <div class="slot-body">
+      <h4>02 · Phase hold, on and off <span class="tag t-open">needed</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Same flat-ground run twice, with <code>carrier_hold_gain</code> at 6.0 and at 0.
+        Plot <code>/terrain/state</code> beside it — the phantom risers should appear
+        and disappear with the hold.
+      </p>
+    </div>
+  </div>
+
+  <div class="slot" data-media="tof-terrain">
+    <div class="slot-body">
+      <h4>03 · Crossing a threshold and refusing a drop <span class="tag t-open">needed</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Drive over the 22&nbsp;mm door sill (classified flat, drives through), then at
+        the landing edge (classified cliff, refuses). RViz with the terrain hazard cloud
+        visible.
+      </p>
+    </div>
+  </div>
+
+  <div class="slot" data-media="precise-dock">
+    <div class="slot-body">
+      <h4>04 · Nav2 versus the docking servo <span class="tag t-open">needed</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Arrive at the fridge on Nav2 alone (±20&nbsp;cm), then run
+        <code>dock_precisely</code> and show the final error on
+        <code>/docking/status</code> settling inside ±2&nbsp;cm.
+      </p>
+    </div>
+  </div>
+
+  <div class="slot" data-media="agent-errand">
+    <div class="slot-body">
+      <h4>05 · An errand end to end <span class="tag t-open">needed</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Screen capture of <code>r2d2_mcp.agent</code> with the tool trace visible.
+        Ideally one where a tool <em>fails</em> and the model recovers — that is the
+        whole argument for tools over one-shot JSON, and it is far more convincing seen
+        than described.
+      </p>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Where to put them.</strong> Save as <code>docs/media/&lt;name&gt;.mp4</code>
+    with a poster frame at <code>docs/media/&lt;name&gt;.jpg</code>. The page checks for
+    the file on load and replaces the placeholder with a real player. Keep clips under
+    30&nbsp;s and 5&nbsp;MB so the page stays fast; <code>record_demo.sh</code> handles
+    the encoding.
+  </div>
+</section>
+
+<section id="contribute">
+  <p class="sec-no">08 — CONTRIBUTE</p>
+  <h2>Where the gaps actually are</h2>
+  <p class="lede">
+    Ordered by how much they would tell us, not by difficulty. The first one is worth
+    more than the rest combined.
+  </p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>#</th><th>Gap</th><th>Why it matters</th><th>Size</th></tr>
+    <tr><td>1</td><td><strong>Run the climb in Gazebo and report what happens</strong></td>
+        <td>Settles the gait-match question. A recording of a failure is as valuable as a success</td>
+        <td>A day, mostly tuning</td></tr>
+    <tr><td>2</td><td>Tune the contact physics</td>
+        <td>Everything downstream depends on the clusters behaving like clusters</td><td>Days</td></tr>
+    <tr><td>3</td><td>Validate descent, then enable it</td>
+        <td>Without it the robot goes upstairs and stays there</td><td>Days, carefully</td></tr>
+    <tr><td>4</td><td>A rigid-body contact simulator that can refuse a 0.50 m wall</td>
+        <td>Two attempts failed falsification and were deleted; the bar is in the docs</td><td>Weeks</td></tr>
+    <tr><td>5</td><td>Measure <code>yaw_slip_factor</code> on real surfaces</td>
+        <td>The 1.25 default is an estimate; the error is systematic</td><td>An hour</td></tr>
+    <tr><td>6</td><td>Call the VLA once and check the response shape</td>
+        <td>The request is verified against NVIDIA's API; the response never has been</td><td>An hour</td></tr>
+    <tr><td>7</td><td>Apply the schema and check the pgvector index</td>
+        <td><code>lists=100</code> is a starting guess that needs data</td><td>An hour</td></tr>
+  </table>
+  </div>
+
+  <h3>The one habit worth adopting</h3>
+  <p>
+    Every bug found in this project was in something that had been <em>reasoned about</em>
+    rather than <em>run</em>. So the working rule here is: <strong>a check that passes
+    tells you nothing until you have watched it fail.</strong> Before trusting any new
+    check, break the thing it is supposed to catch and confirm it complains.
+  </p>
+  <p>
+    That habit caught a mistake immediately. Sealing the kitchen's hallway door did not
+    make the reachability test fail — which looked like a broken test. It was a broken
+    falsification: the kitchen has two doors, so the route through the living room
+    survived. It also killed a climb simulator that cheerfully reported success on a
+    0.50&nbsp;m wall. A subtly wrong simulator saying "it climbs" is worse than none.
+  </p>
+
+  <h3>Before you open a PR</h3>
+  <pre><code>python3 scripts/check_ci.py        <span class="cmt"># runs the whole workflow locally</span>
+python3 -m pytest -q src/r2d2_*/test
+python3 scripts/analyse_climb.py
+python3 scripts/generate_diagrams.py   <span class="cmt"># if you touched robot_params.yaml</span></code></pre>
+  <p style="font-size:14px;color:var(--steel)">
+    Eleven checkers run in CI. If you change a dimension, the diagrams on this page and
+    the Gazebo world both regenerate from it — and CI fails if you forget.
+  </p>
+
+  <h3>Reading order for the code</h3>
+  <ol>
+    <li><code>src/r2d2_description/config/robot_params.yaml</code> — every dimension, in one place</li>
+    <li><code>src/r2d2_locomotion/r2d2_locomotion/kinematics.py</code> — the maths, ROS-free and fully tested</li>
+    <li><code>src/r2d2_locomotion/r2d2_locomotion/climb_fsm.py</code> — where the stair logic lives</li>
+    <li><code>src/r2d2_mcp/r2d2_mcp/server.py</code> — the robot as fifteen tools</li>
+    <li><a href="ARCHITECTURE_V2.md">ARCHITECTURE_V2.md</a> — the full rationale, including what is not verified</li>
+  </ol>
+</section>
+
+<footer>
+  <p>
+    Companion to the <a href="index.html">main project page</a>. Source:
+    <a href="https://github.com/Jayinaksha/agentic-bot">github.com/Jayinaksha/agentic-bot</a>.
+    Diagrams are generated from <code>robot_params.yaml</code> by
+    <code>scripts/generate_diagrams.py</code>; the simulations run the same arithmetic
+    as <code>scripts/analyse_climb.py</code>.
+  </p>
+  <p style="color:var(--code-c);font-size:12.5px">
+    Nothing on this page has been validated on hardware. Where something is unverified
+    it says so.
+  </p>
+</footer>
+
+</div>
+<script>
+/* ===========================================================================
+   Simulations for the R2-D2 Redux learn page.
+
+   These run the same arithmetic as scripts/analyse_climb.py and
+   r2d2_locomotion/kinematics.py. Where a formula appears in both, the Python
+   is the source of truth and this is a transcription — the numbers below are
+   spot-checked against it by tests/test_learn_page.py.
+
+   No dependencies, no build step. Everything degrades to a static readout if
+   canvas is unavailable.
+   =========================================================================== */
+'use strict';
+
+const T = {ground:'#0E1114', plate:'#14181D', edge:'#262E37', edgeHi:'#38424E',
+           steel:'#828E9B', chalk:'#E2E7EC', oxide:'#C4552A', ember:'#FF9A52',
+           sense:'#7FA3B8', good:'#0ca30c', warning:'#fab219',
+           serious:'#ec835a', critical:'#d03b3b'};
+
+/* Constants mirrored from robot_params.yaml / locomotion.yaml. */
+const P = {
+  trackWidth: 0.340, wheelbase: 0.260, bodyLength: 0.360, bodyHeight: 0.120,
+  /* tofTilt is the config's own literal, not Math.PI/6. They differ by
+     1.2e-6 rad, which is nothing physically and everything for a check
+     that asks whether two files agree. */
+  tofMountHeight: 0.1675, tofTilt: 0.5236, tofForwardOffset: 0.180,
+  stepUpMin: 0.035, stepUpMax: 0.150, cliffDrop: 0.060,
+  contactStallRatio: 0.35, contactConfirmS: 0.6,
+  bodyMass: 6.0, clusterMass: 0.45, tailMass: 0.30, sensorMass: 0.30,
+};
+const G = 9.81;
+
+const $ = (id) => document.getElementById(id);
+const mm = (m) => (m * 1000).toFixed(0);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* Size a canvas for the device pixel ratio so lines are crisp. */
+function fitCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || 800;
+  const h = parseInt(cv.getAttribute('height'), 10);
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return {ctx, w, h};
+}
+
+function label(ctx, x, y, text, colour, size, align, weight) {
+  ctx.fillStyle = colour || T.steel;
+  ctx.font = `${weight || 400} ${size || 11}px "IBM Plex Mono", ui-monospace, monospace`;
+  ctx.textAlign = align || 'left';
+  ctx.fillText(text, x, y);
+}
+
+function readout(el, rows) {
+  el.innerHTML = rows.map(([k, v, c]) =>
+    `<div><span>${k}</span><span${c ? ` style="color:${c}"` : ''}>${v}</span></div>`
+  ).join('');
+}
+
+function verdict(el, ok, text) {
+  const colour = ok === true ? T.good : ok === false ? T.critical : T.warning;
+  const mark = ok === true ? '✓' : ok === false ? '✕' : '!';
+  el.style.color = colour;
+  el.style.borderTop = `1px solid ${T.edge}`;
+  el.textContent = `${mark}  ${text}`;
+}
+
+/* Draw one tri-star cluster at the straddle phase, or at a given carrier angle. */
+function cluster(ctx, cx, cy, rClu, rSub, phase, highlight) {
+  ctx.strokeStyle = T.edgeHi; ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.arc(cx, cy, rClu, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  for (let k = 0; k < 3; k++) {
+    const a = phase + k * 2 * Math.PI / 3;
+    const wx = cx + rClu * Math.cos(a), wy = cy - rClu * Math.sin(a);
+    ctx.strokeStyle = T.edgeHi; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(wx, wy); ctx.stroke();
+    const low = Math.sin(a) < -0.2;
+    ctx.fillStyle = T.plate;
+    ctx.strokeStyle = low ? (highlight || T.ember) : T.steel;
+    ctx.lineWidth = low ? 2.5 : 1.5;
+    ctx.beginPath(); ctx.arc(wx, wy, rSub, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  ctx.fillStyle = T.chalk;
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+/* ---------------------------------------------------------------------------
+   Simulation 1 — climb envelope.
+   Mirrors analyse_climb.py: reach, tread fit, gait match, peak torque.
+   --------------------------------------------------------------------------- */
+(function envelope() {
+  const cv = $('c-envelope'); if (!cv) return;
+  const rEl = $('r-envelope'), vEl = $('v-envelope');
+  const ctl = {rclu: $('s-rclu'), rsub: $('s-rsub'), riser: $('s-riser'), tread: $('s-tread')};
+
+  function draw() {
+    const rClu = +ctl.rclu.value / 1000, rSub = +ctl.rsub.value / 1000;
+    const riser = +ctl.riser.value / 1000, tread = +ctl.tread.value / 1000;
+    $('v-rclu').textContent = `${ctl.rclu.value} mm`;
+    $('v-rsub').textContent = `${ctl.rsub.value} mm`;
+    $('v-riser').textContent = `${ctl.riser.value} mm`;
+    $('v-tread').textContent = `${ctl.tread.value} mm`;
+
+    /* analyse_climb.py: climb_envelope() and the gait/torque checks. */
+    const reach = rClu + rSub;
+    const margin = (reach - riser) / riser;
+    const canMount = reach > riser;
+    const treadOk = tread > 2 * rSub;
+    const advance = rClu * Math.sqrt(3);
+    const pitch = Math.hypot(riser, tread);
+    const ratio = advance / pitch;
+    const mass = P.bodyMass + 4 * P.clusterMass + P.tailMass + P.sensorMass;
+    const peakTorque = mass * G * rClu / 2;
+    const slope = Math.atan2(riser, tread);
+
+    const {ctx, w, h} = fitCanvas(cv);
+    ctx.fillStyle = T.ground; ctx.fillRect(0, 0, w, h);
+
+    const scale = clamp(Math.min(w / 1.05, 520 / Math.max(reach * 2.2, 0.4)), 300, 900);
+    const oy = h - 62, ox = w * 0.30;
+    const X = (m) => ox + m * scale, Y = (m) => oy - m * scale;
+
+    /* Two steps of the flight. */
+    for (let i = 0; i < 2; i++) {
+      ctx.fillStyle = T.plate; ctx.strokeStyle = T.edgeHi; ctx.lineWidth = 1.5;
+      const x = X(i * tread), y = Y((i + 1) * riser);
+      const bw = tread * scale, bh = (i + 1) * riser * scale;
+      ctx.fillRect(x, y, bw, bh); ctx.strokeRect(x, y, bw, bh);
+    }
+    ctx.strokeStyle = T.edgeHi; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(8, oy); ctx.lineTo(X(0), oy); ctx.stroke();
+
+    /* The cluster, resting just short of the first riser. */
+    const cx = X(-rClu * 0.75), cy = Y(rClu * Math.cos(Math.PI / 3) + rSub);
+    cluster(ctx, cx, cy, rClu * scale, rSub * scale, -Math.PI / 6,
+            canMount ? T.ember : T.critical);
+
+    /* Reach arc from the nosing. */
+    ctx.strokeStyle = canMount ? T.ember : T.critical;
+    ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.arc(X(0), Y(riser), reach * scale, Math.PI, Math.PI * 1.5);
+    ctx.stroke(); ctx.setLineDash([]);
+
+    /* Riser height marker against the reach. */
+    ctx.strokeStyle = canMount ? T.good : T.critical; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(0) - 14, oy); ctx.lineTo(X(0) - 14, Y(riser)); ctx.stroke();
+    label(ctx, X(0) - 20, (oy + Y(riser)) / 2, `${mm(riser)}`, canMount ? T.good : T.critical, 11, 'right');
+
+    label(ctx, 12, 22, `reach ${mm(reach)} mm`, canMount ? T.ember : T.critical, 12, 'left', 500);
+    label(ctx, 12, 40, `slope ${(slope * 180 / Math.PI).toFixed(1)}°`, T.steel, 11);
+    label(ctx, w - 12, h - 14, 'drag the sliders', T.code, 10, 'right');
+
+    readout(rEl, [
+      ['reach = r_cluster + r_sub', `${mm(reach)} mm`, canMount ? T.good : T.critical],
+      ['margin over riser', `${(margin * 100).toFixed(0)} %`, margin >= 0.08 ? T.good : T.warning],
+      ['tread vs sub-wheel Ø', `${mm(tread)} / ${mm(2 * rSub)} mm`, treadOk ? T.good : T.critical],
+      ['advance per 120° tumble', `${mm(advance)} mm`, T.chalk],
+      ['step pitch', `${mm(pitch)} mm`, T.chalk],
+      ['gait ratio', ratio.toFixed(2), (ratio > 0.92 && ratio < 1.08) ? T.good : T.warning],
+      ['peak torque per cluster', `${peakTorque.toFixed(2)} N·m`, peakTorque > 4 ? T.warning : T.good],
+      ['mass (from robot_params)', `${mass.toFixed(1)} kg`, T.chalk],
+    ]);
+
+    if (!canMount) {
+      verdict(vEl, false, `Cannot mount: reach ${mm(reach)} mm does not clear a ${mm(riser)} mm riser. No software fixes this.`);
+    } else if (!treadOk) {
+      verdict(vEl, false, `Tread too shallow: a cluster bridges two risers instead of landing on the tread.`);
+    } else if (margin < 0.08) {
+      verdict(vEl, null, `Clears by only ${(margin * 100).toFixed(0)}% — wheel compliance and stair nosings will eat that. Aim for 15%.`);
+    } else if (ratio < 0.92 || ratio > 1.08) {
+      verdict(vEl, null, `Climbs, but the gait does not track: ${ratio.toFixed(2)} of a step per tumble. Lumpy and slower than ideal — this is the shipped configuration.`);
+    } else {
+      verdict(vEl, true, `Mounts with ${(margin * 100).toFixed(0)}% margin and walks ${ratio.toFixed(2)} steps per tumble.`);
+    }
+  }
+  Object.values(ctl).forEach((s) => s.addEventListener('input', draw));
+  window.addEventListener('resize', draw);
+  draw();
+})();
+
+/* ---------------------------------------------------------------------------
+   Simulation 2 — the ToF beam.
+   Mirrors kinematics.py: height_delta() and classify_delta().
+   --------------------------------------------------------------------------- */
+(function tof() {
+  const cv = $('c-tof'); if (!cv) return;
+  const rEl = $('r-tof'), vEl = $('v-tof');
+  const sDz = $('s-dz'), sPitch = $('s-pitch');
+
+  /* kinematics.py: classify_delta */
+  function classify(dz) {
+    if (dz === null) return ['unknown', T.steel];
+    if (dz < -P.cliffDrop) return ['cliff', T.critical];
+    if (dz > P.stepUpMax) return ['blocked', T.serious];
+    if (dz >= P.stepUpMin) return ['climbable riser', T.warning];
+    return ['flat', T.good];
+  }
+  /* kinematics.py: height_delta */
+  function heightDelta(range, pitch) {
+    const eff = P.tofTilt + pitch;
+    if (eff <= 0.05) return null;
+    return P.tofMountHeight - range * Math.sin(eff);
+  }
+
+  function draw() {
+    const dz = +sDz.value / 1000;
+    const pitch = +sPitch.value / 1000;
+    $('v-dz').textContent = `${sDz.value} mm`;
+    $('v-pitch').textContent = `${(pitch * 180 / Math.PI).toFixed(1)}°`;
+
+    /* The range the sensor would actually measure for this floor and attitude. */
+    const eff = P.tofTilt + pitch;
+    const range = eff > 0.05 ? (P.tofMountHeight - dz) / Math.sin(eff) : Infinity;
+    const corrected = heightDelta(range, pitch);
+    const naive = P.tofMountHeight - range * Math.sin(P.tofTilt);
+    const [cName, cColour] = classify(corrected);
+    const [nName, nColour] = classify(naive);
+
+    const {ctx, w, h} = fitCanvas(cv);
+    ctx.fillStyle = T.ground; ctx.fillRect(0, 0, w, h);
+
+    const scale = clamp(w / 1.25, 320, 700);
+    const oy = h - 70, ox = w * 0.20;
+    const X = (m) => ox + m * scale, Y = (m) => oy - m * scale;
+
+    /* Robot body, pitched. */
+    ctx.save();
+    ctx.translate(X(0), Y(P.tofMountHeight));
+    ctx.rotate(pitch);
+    ctx.fillStyle = T.plate; ctx.strokeStyle = T.chalk; ctx.lineWidth = 2;
+    const bw = P.bodyLength * scale, bh = P.bodyHeight * scale;
+    ctx.fillRect(-bw, 0, bw, bh); ctx.strokeRect(-bw, 0, bw, bh);
+    ctx.restore();
+
+    /* Floor: level up to the sensor spot, then stepped by dz. */
+    const spot = eff > 0.05 ? (P.tofMountHeight - dz) / Math.tan(eff) : 3;
+    ctx.strokeStyle = T.edgeHi; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(8, oy); ctx.lineTo(X(spot * 0.55), oy);
+    ctx.lineTo(X(spot * 0.55), Y(dz)); ctx.lineTo(w - 8, Y(dz)); ctx.stroke();
+
+    /* The beam. */
+    ctx.strokeStyle = T.sense; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(P.tofMountHeight));
+    ctx.lineTo(X(spot), Y(dz)); ctx.stroke();
+    ctx.fillStyle = T.sense;
+    ctx.beginPath(); ctx.arc(X(0), Y(P.tofMountHeight), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = cColour; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(X(spot), Y(dz), 6, 0, Math.PI * 2); ctx.stroke();
+
+    label(ctx, 12, 22, `beam ${isFinite(range) ? range.toFixed(3) + ' m' : 'no return'}`, T.sense, 12, 'left', 500);
+    label(ctx, 12, 40, `spot ${isFinite(spot) ? mm(spot) : '—'} mm ahead`, T.steel, 11);
+    label(ctx, X(spot), Y(dz) - 16, cName, cColour, 12, 'middle', 600);
+
+    const disagree = cName !== nName;
+    readout(rEl, [
+      ['measured range', isFinite(range) ? `${range.toFixed(3)} m` : 'none', T.chalk],
+      ['flat-ground return', `${(P.tofMountHeight / Math.sin(P.tofTilt)).toFixed(3)} m`, T.steel],
+      ['dz, pitch-corrected', corrected === null ? '—' : `${mm(corrected)} mm`, cColour],
+      ['→ classified', cName, cColour],
+      ['dz, no correction', `${mm(naive)} mm`, nColour],
+      ['→ would classify', nName, nColour],
+    ]);
+
+    if (corrected === null) {
+      verdict(vEl, null, 'Nose so far up the beam no longer points at the floor. Reported as unknown, which is neither a cliff nor a riser.');
+    } else if (disagree) {
+      verdict(vEl, false, `Pitch correction matters here: without it this floor reads "${nName}" instead of "${cName}". This is the ramp bug the regression test is named for.`);
+    } else if (cName === 'flat' && Math.abs(dz) > 0.015) {
+      verdict(vEl, true, `A ${mm(dz)} mm sill is classified flat on purpose — the robot drives over it rather than treating it as a step.`);
+    } else {
+      verdict(vEl, true, `Classified "${cName}". Corrected and naive readings agree at this attitude.`);
+    }
+  }
+  [sDz, sPitch].forEach((s) => s.addEventListener('input', draw));
+  $('b-preset-sill').addEventListener('click', () => { sDz.value = 22; sPitch.value = 0; draw(); });
+  $('b-preset-ramp').addEventListener('click', () => {
+    /* On the 12.1° ramp the robot pitches nose-up and the floor rises with it. */
+    sPitch.value = Math.round(-0.2113 * 1000); sDz.value = 0; draw();
+  });
+  window.addEventListener('resize', draw);
+  draw();
+})();
+
+/* ---------------------------------------------------------------------------
+   Simulation 3 — approach, stall, and the two candidate triggers.
+   Mirrors kinematics.py: RiserContact.
+   --------------------------------------------------------------------------- */
+(function climb() {
+  const cv = $('c-climb'); if (!cv) return;
+  const rEl = $('r-climb'), vEl = $('v-climb');
+  const sHold = $('s-hold'), sSpeed = $('s-speed');
+  const DT = 1 / 50, RISER = 0.150;
+
+  let st, raf = null;
+  function reset() {
+    st = {x: -0.55, t: 0, running: false, evidence: 0, commanded: 0,
+          travelled: 0, window: 0, fired: null, carrier: -Math.PI / 6, pitch: 0};
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    draw();
+  }
+
+  function step() {
+    const hold = +sHold.value === 1;
+    const v = +sSpeed.value / 100;
+    st.t += DT;
+
+    /* Contact with the riser stops forward motion; nothing tips, because the
+       carriers are phase-locked. That is the whole point of this simulation. */
+    const atRiser = st.x >= -0.001;
+    const actual = atRiser ? 0 : v;
+    st.x = Math.min(0, st.x + actual * DT);
+
+    /* Carrier: held at the straddle phase, or free to wander when hold is off. */
+    if (hold) {
+      const err = (-Math.PI / 6) - st.carrier;
+      st.carrier += clamp(6 * err, -2, 2) * DT;
+    } else {
+      st.carrier += (actual / 0.115) * DT * 0.35;
+    }
+    const rideHeight = 0.115 * Math.cos(Math.PI / 3 - ((st.carrier + Math.PI / 6) % (2 * Math.PI / 3))) + 0.050;
+
+    /* Body pitch: stays flat. A phase-locked cluster cannot ride up a face. */
+    st.pitch = 0;
+
+    /* kinematics.py: RiserContact.update */
+    st.commanded += Math.abs(v) * DT;
+    st.travelled += Math.abs(actual * DT);
+    st.window += DT;
+    const riserAhead = st.x > -0.32;
+    if (!riserAhead) { st.evidence = 0; st.commanded = 0; st.travelled = 0; st.window = 0; }
+    else if (st.commanded >= 0.02) {
+      const ratio = st.travelled / st.commanded;
+      st.evidence = ratio < P.contactStallRatio ? st.evidence + st.window : 0;
+      st.commanded = 0; st.travelled = 0; st.window = 0;
+    }
+    if (st.evidence >= P.contactConfirmS && !st.fired) st.fired = st.t;
+    if (st.t > 15 || (st.fired && st.t > st.fired + 1.2)) st.running = false;
+    return {hold, v, rideHeight, riserAhead};
+  }
+
+  function draw(s) {
+    const hold = +sHold.value === 1;
+    $('v-hold').textContent = hold ? 'on' : 'off';
+    $('v-speed').textContent = `${(+sSpeed.value / 100).toFixed(2)} m/s`;
+    const rideHeight = s ? s.rideHeight : 0.1075;
+
+    const {ctx, w, h} = fitCanvas(cv);
+    ctx.fillStyle = T.ground; ctx.fillRect(0, 0, w, h);
+    const scale = clamp(w / 1.15, 340, 720);
+    const oy = h - 78, ox = w * 0.62;
+    const X = (m) => ox + m * scale, Y = (m) => oy - m * scale;
+
+    /* The step. */
+    ctx.fillStyle = T.plate; ctx.strokeStyle = T.edgeHi; ctx.lineWidth = 1.5;
+    ctx.fillRect(X(0), Y(RISER), w - X(0), RISER * scale);
+    ctx.strokeRect(X(0), Y(RISER), w - X(0), RISER * scale);
+    ctx.strokeStyle = T.edgeHi; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(8, oy); ctx.lineTo(X(0), oy); ctx.stroke();
+
+    /* Robot: chassis plus the front cluster. */
+    const cx = X(st.x), cy = Y(rideHeight);
+    ctx.fillStyle = T.plate; ctx.strokeStyle = T.chalk; ctx.lineWidth = 2;
+    const bw = P.bodyLength * scale, bh = P.bodyHeight * scale;
+    ctx.fillRect(cx - bw + 20, cy - bh / 2 - 8, bw, bh);
+    ctx.strokeRect(cx - bw + 20, cy - bh / 2 - 8, bw, bh);
+    cluster(ctx, cx, cy, 0.115 * scale, 0.050 * scale, st.carrier,
+            st.fired ? T.ember : T.sense);
+
+    /* Ride-height reference, so the bob is visible when the hold is off. */
+    ctx.strokeStyle = hold ? T.good : T.warning;
+    ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(8, Y(0.1075)); ctx.lineTo(w - 8, Y(0.1075)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    label(ctx, 12, 22, `t = ${st.t.toFixed(2)} s`, T.chalk, 12, 'left', 500);
+    label(ctx, 12, 40, `ride height ${mm(rideHeight)} mm`,
+          Math.abs(rideHeight - 0.1075) > 0.005 ? T.warning : T.good, 11);
+    if (st.fired) label(ctx, X(0) + 12, Y(RISER) - 14, `stall confirmed at ${st.fired.toFixed(2)} s`, T.ember, 12, 'left', 600);
+
+    readout(rEl, [
+      ['position vs riser', `${mm(st.x)} mm`, T.chalk],
+      ['ride height', `${mm(rideHeight)} mm`, Math.abs(rideHeight - 0.1075) > 0.005 ? T.warning : T.good],
+      ['body pitch', `${(st.pitch * 180 / Math.PI).toFixed(2)}°`, T.critical],
+      ['pitch trigger (> 4.6°)', st.pitch > 0.08 ? 'FIRED' : 'never fires', T.critical],
+      ['stall evidence', `${st.evidence.toFixed(2)} / ${P.contactConfirmS} s`, T.ember],
+      ['stall trigger', st.fired ? `FIRED at ${st.fired.toFixed(2)} s` : 'waiting', st.fired ? T.good : T.steel],
+    ]);
+
+    if (st.fired) {
+      verdict(vEl, true, `Stall confirmed after ${st.fired.toFixed(2)} s and the transmission switches to tumbling. The pitch trigger never fired, and never would.`);
+    } else if (st.t > 14) {
+      verdict(vEl, false, `15 s approach timeout with pitch still at 0°. This is exactly how the original FSM aborted every climb.`);
+    } else if (st.running) {
+      verdict(vEl, null, `Approaching. Watch pitch stay at 0° — with the carriers locked the chassis cannot tip.`);
+    } else {
+      verdict(vEl, null, `Press "approach the step". The robot drives into the riser; only one of the two triggers ever fires.`);
+    }
+  }
+
+  function loop() {
+    const s = step(); draw(s);
+    if (st.running) raf = requestAnimationFrame(loop); else raf = null;
+  }
+  $('b-climb-run').addEventListener('click', () => {
+    if (st.running) return;
+    if (st.fired || st.t > 14) reset();
+    st.running = true; loop();
+  });
+  $('b-climb-reset').addEventListener('click', reset);
+  [sHold, sSpeed].forEach((s) => s.addEventListener('input', () => draw()));
+  window.addEventListener('resize', () => draw());
+  reset();
+})();
+
+/* ---------------------------------------------------------------------------
+   Media slots: fill in any demo whose file has actually been recorded.
+   --------------------------------------------------------------------------- */
+(function media() {
+  document.querySelectorAll('.slot[data-media]').forEach((slot) => {
+    const name = slot.dataset.media;
+    const src = `media/${name}.mp4`;
+
+    /* Probe with the <video> element itself rather than fetch(). fetch() is
+       subject to CORS even for a same-directory file, so opening this page from
+       disk would log an error per slot and show every demo as missing. Loading
+       metadata works under both file:// and https://. */
+    const v = document.createElement('video');
+    v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+    v.poster = `media/${name}.jpg`;
+
+    const placeholder = () => {
+      v.remove();
+      if (slot.querySelector('.slot-empty')) return;
+      const note = document.createElement('div');
+      note.className = 'slot-empty';
+      note.innerHTML = `<span aria-hidden="true">▢</span><span>Not recorded yet — ` +
+                       `<b>docs/media/${name}.mp4</b>. Run ` +
+                       `<b>bash scripts/record_demo.sh ${name}</b>, drop the file in, ` +
+                       `and this fills itself.</span>`;
+      slot.insertBefore(note, slot.firstChild);
+    };
+
+    v.addEventListener('loadedmetadata', () => {
+      slot.style.borderStyle = 'solid';
+      const tag = slot.querySelector('.tag');
+      if (tag) { tag.textContent = 'recorded'; tag.className = 'tag t-done'; }
+    });
+    v.addEventListener('error', placeholder, {once: true});
+
+    slot.insertBefore(v, slot.firstChild);
+    v.src = src;
+    /* If the browser neither loads nor errors (some file:// cases go quiet),
+       fall back to the placeholder rather than leaving an empty frame. */
+    setTimeout(() => { if (!v.videoHeight && !v.duration) placeholder(); }, 1500);
+  });
+})();
+
+/* Rail highlight follows the section in view. */
+(function rail() {
+  const links = [...document.querySelectorAll('.rail a[href^="#"]')];
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href')))
+                        .filter(Boolean);
+  if (!('IntersectionObserver' in window) || !sections.length) return;
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      links.forEach((a) => a.classList.toggle('on',
+        a.getAttribute('href') === `#${e.target.id}`));
+    });
+  }, {rootMargin: '-40% 0px -55% 0px'});
+  sections.forEach((s) => io.observe(s));
+})();
+</script>
+</body>
+</html>

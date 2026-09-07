@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 400"
+     width="100%" role="img" aria-labelledby="t d" preserveAspectRatio="xMidYMid meet">
+  <title id="t">The climb state machine</title>
+  <desc id="d">Six states: IDLE, ALIGN, APPROACH, CLIMB, SETTLE and ABORT. A request moves IDLE to ALIGN. Squaring up moves ALIGN to APPROACH. A wheel stall moves APPROACH to CLIMB. Level attitude moves CLIMB to SETTLE, then back to IDLE. A timeout, a stall in the climb, or an emergency stop moves any active state to ABORT and back to IDLE.</desc>
+  <rect width="880" height="400" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">THE CLIMB STATE MACHINE</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">Direction is read from the terrain, not the request: a riser ahead means up, a drop means down.</text>
+  <rect x="60" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#E2E7EC" stroke-width="1.8"/>
+  <text x="130.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">IDLE</text>
+  <text x="130.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">rolling; passes</text>
+  <text x="130.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">commands through</text>
+  <rect x="215" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.8"/>
+  <text x="285.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#7FA3B8" text-anchor="middle" font-weight="600" opacity="1.0">ALIGN</text>
+  <text x="285.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">square up on</text>
+  <text x="285.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">ToF skew</text>
+  <rect x="370" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#7FA3B8" stroke-width="1.8"/>
+  <text x="440.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#7FA3B8" text-anchor="middle" font-weight="600" opacity="1.0">APPROACH</text>
+  <text x="440.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">creep until</text>
+  <text x="440.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">the wheels stall</text>
+  <rect x="525" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#FF9A52" stroke-width="1.8"/>
+  <text x="595.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#FF9A52" text-anchor="middle" font-weight="600" opacity="1.0">CLIMB</text>
+  <text x="595.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">tumbling;</text>
+  <text x="595.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">IMU-integrated rise</text>
+  <rect x="680" y="150" width="140" height="66" rx="6" fill="#0E1114" stroke="#E2E7EC" stroke-width="1.8"/>
+  <text x="750.0" y="174.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">SETTLE</text>
+  <text x="750.0" y="191.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">rolling; hold</text>
+  <text x="750.0" y="204.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">for relocalisation</text>
+  <rect x="370" y="290" width="140" height="66" rx="6" fill="#0E1114" stroke="#d03b3b" stroke-width="1.8"/>
+  <text x="440.0" y="314.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#d03b3b" text-anchor="middle" font-weight="600" opacity="1.0">ABORT</text>
+  <text x="440.0" y="331.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">reverse clear,</text>
+  <text x="440.0" y="344.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">latch the reason</text>
+  <line x1="200.0" y1="183.0" x2="215.0" y2="183.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="215" cy="183" r="3.5" fill="#828E9B"/>
+  <text x="207.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">request</text>
+  <line x1="355.0" y1="183.0" x2="370.0" y2="183.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="370" cy="183" r="3.5" fill="#828E9B"/>
+  <text x="362.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">square</text>
+  <line x1="510.0" y1="183.0" x2="525.0" y2="183.0" stroke="#FF9A52" stroke-width="1.6"/>
+  <circle cx="525" cy="183" r="3.5" fill="#FF9A52"/>
+  <text x="517.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#FF9A52" text-anchor="middle" font-weight="400" opacity="1.0">stall</text>
+  <line x1="665.0" y1="183.0" x2="680.0" y2="183.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="680" cy="183" r="3.5" fill="#828E9B"/>
+  <text x="672.5" y="175.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">level</text>
+  <line x1="750.0" y1="150.0" x2="750.0" y2="120.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="750" cy="120" r="3.5" fill="#828E9B"/>
+  <line x1="750.0" y1="120.0" x2="130.0" y2="120.0" stroke="#828E9B" stroke-width="1.6"/>
+  <line x1="130.0" y1="120.0" x2="130.0" y2="150.0" stroke="#828E9B" stroke-width="1.6"/>
+  <circle cx="130" cy="150" r="3.5" fill="#828E9B"/>
+  <text x="130.0" y="127.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">done</text>
+  <line x1="440.0" y1="216.0" x2="440.0" y2="290.0" stroke="#d03b3b" stroke-width="1.6"/>
+  <circle cx="440" cy="290" r="3.5" fill="#d03b3b"/>
+  <text x="440.0" y="267.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="10" fill="#d03b3b" text-anchor="middle" font-weight="400" opacity="1.0">timeout / stall / e-stop</text>
+  <line x1="370.0" y1="323.0" x2="130.0" y2="323.0" stroke="#d03b3b" stroke-width="1.6"/>
+  <line x1="130.0" y1="323.0" x2="130.0" y2="216.0" stroke="#d03b3b" stroke-width="1.6"/>
+  <circle cx="130" cy="216" r="3.5" fill="#d03b3b"/>
+  <text x="24.0" y="366.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#FF9A52" text-anchor="start" font-weight="400" opacity="1.0">APPROACH confirms contact from a STALL, not from body pitch: with the carriers phase-locked the chassis cannot tip, so a pitch threshold would never fire.</text>
+  <text x="24.0" y="384.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">Contact = both front beams see a riser AND travel falls below 35% of commanded, for 0.6 s.</text>
+
+</svg>

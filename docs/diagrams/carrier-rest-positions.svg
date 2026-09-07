@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500"
+     width="100%" role="img" aria-labelledby="t d" preserveAspectRatio="xMidYMid meet">
+  <title id="t">The two carrier rest positions</title>
+  <desc id="d">A three-spoke carrier rests either straddling two sub-wheels, with its axle 107.5 mm above ground, or balanced on one, 165.0 mm up. The 57 mm difference exceeds the 35 mm height change the terrain monitor treats as a step, so a carrier left at zero velocity would make flat floor read as stairs.</desc>
+  <rect width="880" height="500" fill="#14181D"/>
+  <text x="24.0" y="34.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="16" fill="#E2E7EC" text-anchor="start" font-weight="600" opacity="1.0">WHY THE CARRIER IS HELD AT A PHASE</text>
+  <text x="24.0" y="54.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">A three-spoke carrier has two rest positions. Holding it at zero velocity parks it at whichever it reached.</text>
+  <line x1="90.0" y1="372.0" x2="390.0" y2="372.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="240" cy="280.8" r="97.6" fill="none" stroke="#38424E" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="240.0" y1="280.8" x2="324.5" y2="329.6" stroke="#38424E" stroke-width="2"/>
+  <circle cx="324.5" cy="329.6" r="42.4" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <line x1="240.0" y1="280.8" x2="240.0" y2="183.2" stroke="#38424E" stroke-width="2"/>
+  <circle cx="240.0" cy="183.2" r="42.4" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <line x1="240.0" y1="280.8" x2="155.5" y2="329.6" stroke="#38424E" stroke-width="2"/>
+  <circle cx="155.5" cy="329.6" r="42.4" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <circle cx="240" cy="280.8" r="3" fill="#E2E7EC"/>
+  <text x="240.0" y="398.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">two wheels down</text>
+  <text x="240.0" y="416.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#FF9A52" text-anchor="middle" font-weight="400" opacity="1.0">axle 107.5 mm</text>
+  <text x="240.0" y="434.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">stable, lower, and what the controller holds</text>
+  <line x1="450.0" y1="372.0" x2="750.0" y2="372.0" stroke="#38424E" stroke-width="2"/>
+  <circle cx="600" cy="232.0" r="97.6" fill="none" stroke="#38424E" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="600.0" y1="232.0" x2="600.0" y2="329.6" stroke="#38424E" stroke-width="2"/>
+  <circle cx="600.0" cy="329.6" r="42.4" fill="#14181D" stroke="#FF9A52" stroke-width="2.5"/>
+  <line x1="600.0" y1="232.0" x2="684.5" y2="183.2" stroke="#38424E" stroke-width="2"/>
+  <circle cx="684.5" cy="183.2" r="42.4" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <line x1="600.0" y1="232.0" x2="515.5" y2="183.2" stroke="#38424E" stroke-width="2"/>
+  <circle cx="515.5" cy="183.2" r="42.4" fill="#14181D" stroke="#828E9B" stroke-width="1.5"/>
+  <circle cx="600" cy="232.0" r="3" fill="#E2E7EC"/>
+  <text x="600.0" y="398.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#E2E7EC" text-anchor="middle" font-weight="600" opacity="1.0">one wheel down</text>
+  <text x="600.0" y="416.0" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">axle 165.0 mm</text>
+  <text x="600.0" y="434.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="11" fill="#828E9B" text-anchor="middle" font-weight="400" opacity="1.0">unstable, 57 mm higher</text>
+  <line x1="800.0" y1="280.8" x2="800.0" y2="232.0" stroke="#C4552A" stroke-width="2"/>
+  <line x1="794.0" y1="280.8" x2="806.0" y2="280.8" stroke="#C4552A" stroke-width="2"/>
+  <line x1="794.0" y1="232.0" x2="806.0" y2="232.0" stroke="#C4552A" stroke-width="2"/>
+  <text x="788.0" y="256.4" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" fill="#C4552A" text-anchor="end" font-weight="600" opacity="1.0">57 mm</text>
+  <text x="788.0" y="272.4" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="10" fill="#C4552A" text-anchor="end" font-weight="400" opacity="1.0">vs 35 mm step threshold</text>
+  <text x="24.0" y="460.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="#FF9A52" text-anchor="start" font-weight="600" opacity="1.0">57 mm of ride-height variation against a 35 mm step threshold.</text>
+  <text x="24.0" y="480.0" font-family="Saira Condensed, IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="#828E9B" text-anchor="start" font-weight="400" opacity="1.0">An unheld carrier makes the robot read phantom stairs on flat floor, and the climb FSM can then be triggered by nothing.</text>
+
+</svg>

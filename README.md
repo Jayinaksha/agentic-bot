@@ -6,7 +6,10 @@ Two stacks live in this repository.
 house in Gazebo, with MCP tool calling in place of one-shot JSON planning, NVIDIA
 open models for reasoning and vision, and an event-sourced memory on NATS
 JetStream projected into Postgres/pgvector.
-See **[docs/ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md)**.
+See **[docs/ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md)** for the design
+rationale, or **[docs/learn.html](docs/learn.html)** for the illustrated version:
+three browser simulations driven by the robot's own constants, generated
+diagrams, a step-by-step reproduction guide and a map of where to contribute.
 
 **v1 (original)** — the distributed robot/supercomputer/laptop system described
 further down. Still present and still works; v2 does not delete it.
