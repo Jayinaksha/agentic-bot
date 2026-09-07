@@ -132,13 +132,18 @@ def main() -> int:
                   f'figure in the prose has gone stale')
             problems += 1
 
-    # The capture script and the page each name the demos. A slot with no
-    # recipe can never be filled; a recipe with no slot records a file the page
-    # will never show.
+    # Two capture scripts feed this page, and each slot belongs to exactly one
+    # of them: "sim-" slots to record_sims.py (browser recordings, which any
+    # machine can make), everything else to record_demo.sh (Gazebo, which needs
+    # hardware). A slot with no recipe can never be filled; a recipe with no
+    # slot records a file the page will never show.
+    all_slots = set(re.findall(r'data-media="([a-z0-9-]+)"', html))
+    sim_slots = {n for n in all_slots if n.startswith('sim-')}
+
     script = os.path.join(ROOT, 'scripts/record_demo.sh')
     if os.path.exists(script):
         recipes = set(re.findall(r'^"([a-z-]+)\|', open(script).read(), re.M))
-        slots = set(re.findall(r'data-media="([a-z-]+)"', html))
+        slots = all_slots - sim_slots
         print()
         for name in sorted(slots - recipes):
             print(f'[FAIL] the page has a slot for "{name}" but '
@@ -149,7 +154,42 @@ def main() -> int:
                   f'slot, so the file would never be shown')
             problems += 1
         if slots and slots == recipes:
-            print(f'[ ok ] all {len(slots)} demo slots have a capture recipe')
+            print(f'[ ok ] all {len(slots)} robot demo slots have a capture '
+                  f'recipe')
+
+    sims = os.path.join(ROOT, 'scripts/record_sims.py')
+    if os.path.exists(sims):
+        known = set(re.findall(r"^    '(sim-[a-z-]+)':", open(sims).read(),
+                               re.M))
+        for name in sorted(sim_slots - known):
+            print(f'[FAIL] the page has a simulation slot for "{name}" but '
+                  f'record_sims.py cannot record it')
+            problems += 1
+        for name in sorted(known - sim_slots):
+            print(f'[FAIL] record_sims.py records "{name}" but the page has no '
+                  f'slot for it')
+            problems += 1
+
+    # The simulation clips are committed, unlike the Gazebo ones. A slot that
+    # claims a recording and has no file behind it is the page lying about what
+    # it contains, which is the one thing this section must never do.
+    for name in sorted(sim_slots):
+        m = re.search(rf'data-media="{name}"[^>]*?data-ext="([a-z0-9]+)"'
+                      rf'[^>]*?data-poster="([a-z0-9]+)"', html, re.S)
+        if not m:
+            print(f'[FAIL] simulation slot "{name}" does not declare both '
+                  f'data-ext and data-poster, so the player guesses mp4/jpg')
+            problems += 1
+            continue
+        for kind, ext in (('clip', m.group(1)), ('poster', m.group(2))):
+            path = os.path.join(ROOT, 'docs/media', f'{name}.{ext}')
+            if not os.path.exists(path):
+                print(f'[FAIL] the page shows a recorded {kind} for "{name}" '
+                      f'but docs/media/{name}.{ext} is not in the repository')
+                problems += 1
+    if sim_slots and not problems:
+        print(f'[ ok ] all {len(sim_slots)} simulation clips and posters are '
+              f'present')
 
     print()
     if problems:

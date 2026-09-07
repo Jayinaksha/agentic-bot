@@ -252,13 +252,15 @@ footer{padding:48px 0 20px; color:var(--steel); font-size:13.5px}
     </div>
   </div>
 
-  <div class="note bad" style="margin-top:28px">
-    <strong>There are no recorded videos on this page yet, and none are faked.</strong>
-    I built this stack without access to Gazebo, a GPU or a screen recorder, so I could
-    not capture any. What I could do instead is make the physics
-    <em>runnable in your browser</em> — the three simulations below are driven by the
-    robot's actual constants, not by drawings of them. Section&nbsp;07 has a capture
-    script and empty slots ready for the real footage once you record it.
+  <div class="note warn" style="margin-top:28px">
+    <strong>What is recorded here, and what is not.</strong>
+    The three videos in <a href="#demos">07 Demos</a> are screen recordings of the
+    browser simulations on this page, captured with a headless Chromium. They are real
+    recordings of real code — the same constants, the same equations — but they are
+    recordings of <em>arithmetic</em>, not of a robot. There is no Gazebo footage,
+    because the machine this was built on has no simulator and no GPU. Nothing on this
+    page is a re-enactment: the five empty slots stay empty until someone runs the
+    thing. Which is the point of section 07.
   </div>
 
   <h3>How to use this page</h3>
@@ -1025,9 +1027,70 @@ python3 -m r2d2_mcp.agent --dry-run "go to the kitchen and tell me what is on th
   <p class="sec-no">07 — DEMOS</p>
   <h2>The footage that should live here</h2>
   <p class="lede">
-    These slots are empty on purpose. I had no simulator, GPU or screen recorder, so
-    rather than fake them I built the capture kit and left the frames ready.
+    Two kinds of clip belong on this page. The simulations can be recorded on any
+    machine with a browser, so they are recorded, below. The robot cannot: that needs
+    Gazebo and a GPU. Those five slots stay empty, and the capture kit is ready for
+    whoever has the hardware.
   </p>
+
+  <h3>Recorded: the simulations</h3>
+  <p>
+    Headless Chromium drives the same sliders you can drag in sections 02–04, and
+    records what it sees. Nothing is staged — the numbers in the readouts are computed
+    live by the page's own code from
+    <code>src/r2d2_description/config/robot_params.yaml</code>. Regenerate them with
+    <code>python3 scripts/record_sims.py</code>.
+  </p>
+
+  <div class="slot" data-media="sim-climb-envelope" data-ext="webm" data-poster="png"
+       data-script="python3 scripts/record_sims.py --only climb-envelope">
+    <div class="slot-body">
+      <h4>S1 · The climb envelope, and where it fails <span class="tag t-part">simulation</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Riser height sweeps from a door sill to 210&nbsp;mm. Watch the reach circle
+        — <code>cluster circumradius + sub-wheel radius = 165&nbsp;mm</code> — lose
+        the nosing, and the verdict flip from <em>reachable</em> to <em>not</em>.
+        Then tread depth shrinks below a sub-wheel diameter and the second failure
+        mode appears.
+      </p>
+    </div>
+  </div>
+
+  <div class="slot" data-media="sim-tof-classify" data-ext="webm" data-poster="png"
+       data-script="python3 scripts/record_sims.py --only tof-classify">
+    <div class="slot-body">
+      <h4>S2 · Why the ramp needs pitch correction <span class="tag t-part">simulation</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        The beam crosses a sill, a riser and a cliff, then the robot pitches
+        −11.5° on the 12° ramp. The corrected reading holds at 0&nbsp;mm;
+        the naive one reads −96&nbsp;mm and would call the whole ramp a cliff.
+        This is the bug <code>test_ramp_is_not_a_cliff</code> is named for.
+      </p>
+    </div>
+  </div>
+
+  <div class="slot" data-media="sim-stall-trigger" data-ext="webm" data-poster="png"
+       data-script="python3 scripts/record_sims.py --only stall-trigger">
+    <div class="slot-body">
+      <h4>S3 · The trigger that could never fire <span class="tag t-part">simulation</span></h4>
+      <p style="font-size:14px;color:var(--steel);margin:0">
+        Approach the riser with phase hold on: body pitch stays at 0.00° for the
+        entire run, so a pitch-threshold trigger never fires — it would have aborted
+        every climb. The stall detector accumulates its 0.6&nbsp;s of evidence and
+        fires instead. Turn the hold off and watch the ride height wander across the
+        57&nbsp;mm band that invents phantom stairs.
+      </p>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>These are recordings of the simulations, not of the robot.</strong>
+    They show that the equations do what the text claims, which is worth something and
+    is not the same as showing that the robot climbs stairs. Only the five slots below
+    can settle that.
+  </div>
+
+  <h3>Not recorded: the robot</h3>
 
   <pre><code><span class="cmt"># Records a demo to docs/media/ with the right name and encoding.</span>
 <span class="cmt"># Drop the file in and the slot below fills itself in — no HTML to edit.</span>
@@ -1092,7 +1155,9 @@ bash scripts/record_demo.sh climb-ascent</code></pre>
 
   <div class="note">
     <strong>Where to put them.</strong> Save as <code>docs/media/&lt;name&gt;.mp4</code>
-    with a poster frame at <code>docs/media/&lt;name&gt;.jpg</code>. The page checks for
+    with a poster frame at <code>docs/media/&lt;name&gt;.jpg</code>
+    (the simulation clips above use <code>.webm</code> and <code>.png</code>, declared
+    per slot with <code>data-ext</code>). The page checks for
     the file on load and replaces the placeholder with a real player. Keep clips under
     30&nbsp;s and 5&nbsp;MB so the page stays fast; <code>record_demo.sh</code> handles
     the encoding.
@@ -1603,7 +1668,14 @@ function cluster(ctx, cx, cy, rClu, rSub, phase, highlight) {
 (function media() {
   document.querySelectorAll('.slot[data-media]').forEach((slot) => {
     const name = slot.dataset.media;
-    const src = `media/${name}.mp4`;
+    /* Gazebo demos are mp4 with a jpg poster; the simulation recordings are webm
+       with a png. Each slot declares its own, so adding a clip in a different
+       format is an attribute, not a code change. */
+    const ext = slot.dataset.ext || 'mp4';
+    const posterExt = slot.dataset.poster || 'jpg';
+    const script = slot.dataset.script ||
+                   `bash scripts/record_demo.sh ${name}`;
+    const src = `media/${name}.${ext}`;
 
     /* Probe with the <video> element itself rather than fetch(). fetch() is
        subject to CORS even for a same-directory file, so opening this page from
@@ -1611,7 +1683,7 @@ function cluster(ctx, cx, cy, rClu, rSub, phase, highlight) {
        metadata works under both file:// and https://. */
     const v = document.createElement('video');
     v.controls = true; v.preload = 'metadata'; v.playsInline = true;
-    v.poster = `media/${name}.jpg`;
+    v.poster = `media/${name}.${posterExt}`;
 
     const placeholder = () => {
       v.remove();
@@ -1619,8 +1691,8 @@ function cluster(ctx, cx, cy, rClu, rSub, phase, highlight) {
       const note = document.createElement('div');
       note.className = 'slot-empty';
       note.innerHTML = `<span aria-hidden="true">▢</span><span>Not recorded yet — ` +
-                       `<b>docs/media/${name}.mp4</b>. Run ` +
-                       `<b>bash scripts/record_demo.sh ${name}</b>, drop the file in, ` +
+                       `<b>docs/media/${name}.${ext}</b>. Run ` +
+                       `<b>${script}</b>, drop the file in, ` +
                        `and this fills itself.</span>`;
       slot.insertBefore(note, slot.firstChild);
     };
@@ -1628,7 +1700,12 @@ function cluster(ctx, cx, cy, rClu, rSub, phase, highlight) {
     v.addEventListener('loadedmetadata', () => {
       slot.style.borderStyle = 'solid';
       const tag = slot.querySelector('.tag');
-      if (tag) { tag.textContent = 'recorded'; tag.className = 'tag t-done'; }
+      /* A simulation slot keeps saying "simulation" once it loads. Relabelling it
+         "recorded" would be true and misleading in the same breath: what is
+         recorded is the arithmetic, not the robot. */
+      if (tag && tag.textContent.trim() !== 'simulation') {
+        tag.textContent = 'recorded'; tag.className = 'tag t-done';
+      }
     });
     v.addEventListener('error', placeholder, {once: true});
 
