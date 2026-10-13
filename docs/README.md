@@ -1,35 +1,30 @@
 # Landing page
 
-`index.html` is the project landing page for R2-D2 Redux — a single, self-contained
-file. Fonts (IBM Plex Sans/Mono, Saira Condensed — all SIL OFL) and every image are
-embedded as data URIs, so it has zero external requests and works offline, from a
-USB stick, or as an email attachment.
+`index.html` is the project page for R2-D2 Redux, served at
+<https://jayinaksha.github.io/agentic-bot/> from `main` / `/docs`. The empty `.nojekyll`
+file tells Pages to serve the directory as-is.
 
-## Viewing it
+It is built on **Plate**, the design system shared by every site under
+`jayinaksha.github.io` — this page is where Plate's look came from. The source of truth
+for Plate lives in the portfolio repo (`design-system/`); `assets/plate/` here is a
+vendored copy, so a change there never breaks this page by surprise.
 
-Open `docs/index.html` in any browser.
-
-## Publishing it
-
-The page is static, so anything that serves files will host it. To use GitHub Pages:
-**Settings → Pages → Source: Deploy from a branch → `main` / `/docs`**. It will be
-served at `https://jayinaksha.github.io/agentic-bot/`. The empty `.nojekyll` file
-next to this one tells Pages to serve the directory as-is instead of running it
-through Jekyll.
+| Path | What it holds |
+| --- | --- |
+| `assets/plate/` | `plate.css`, `plate.js`, and the OFL webfonts |
+| `assets/img/` | The annotated hero photo, the semantic map, and the build photos |
+| `assets/media/` | Short muted test-run clips, each with a poster frame |
+| `assets/og.jpg`, `assets/favicon.svg` | Share card and icon |
 
 ## Editing it
 
-All the markup and CSS sit at the top of the file and are ordinary HTML — the long
-base64 strings are confined to the five `@font-face` rules and the `<img src>`
-attributes, and nothing else refers to them.
+- **Accent and palette** — Plate tokens. Override `--accent` on `:root` to recolour the page.
+- **Copy** — each `<section>` has an id matching the top-bar links.
+- **Architecture diagram** — the inline `<svg>` in `#path`, drawn on a 1120 × 500 grid.
+  Node boxes are `<rect class="nb">`; the animated dots follow the `<path>` elements by id
+  (`#w1`…`#w9`) and are hidden under `prefers-reduced-motion`.
+- **Long-form detail** — the hard parts, the service sheet and the run order sit inside
+  `<details class="more">` blocks in `#more`, so the page reads in a minute but nothing is lost.
 
-- **Colours** — the three `:root` blocks at the top. The first is the dark palette,
-  the other two are the light palette (one for the OS preference, one for an explicit
-  toggle). Change a colour in all the blocks it appears in.
-- **Copy** — each `<section>` is labelled with a comment (`══ 05 TRACE ══`).
-- **Architecture diagram** — the inline `<svg>` in `§ 02`, drawn on a 1120 × 500 grid.
-  Node boxes are `<rect class="nb">` with `<text>` beside them; the animated dots
-  follow the `<path>` elements by id (`#w1`…`#w9`).
-
-The page renders in whichever theme the reader's browser is set to, so check both
-after any colour change.
+Check both themes after any colour change; the page follows the reader's system setting
+until they use the toggle.
