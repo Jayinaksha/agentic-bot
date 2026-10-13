@@ -132,7 +132,12 @@ details.more+details.more{margin-top:12px}
 <section class="sect" id="camera">
   <div class="shell">
     <div class="head"><span class="lbl clause">§ 01</span><h2>On camera</h2></div>
-    <p class="head-sub muted">Unedited test runs — the planner on the GPU node, then the robot driving to the goal it produced.</p>
+    <p class="head-sub muted">The edited film first; below it, unedited test runs — the robot driving to its goal, and the planner that produced it.</p>
+    <div class="film mt-s" style="border:1px solid var(--edge-hi);background:#000;margin-bottom:22px">
+      <video src="assets/media/r2d2-film.mp4" poster="assets/media/r2d2-film.jpg" controls preload="none" playsinline
+        style="width:100%;aspect-ratio:16/9;background:#000" aria-label="R2-D2 Redux, the film: from the printed parts to a spoken goal driven on hardware. 1 minute 47, with sound."></video>
+    </div>
+    <p class="figcap" style="margin:-12px 0 26px"><span class="lbl">The film · 1:47 · with sound</span><span class="lbl lbl--accent">parts → architecture → a spoken goal, driven</span></p>
     <div class="duo rise-kids">
       <figure class="reel-fig" style="margin:0">
         <div class="reel">
@@ -510,7 +515,17 @@ details.more+details.more{margin-top:12px}
     <p class="head-sub muted">Laser-cut acrylic, three decks, everything reachable.</p>
     
 
-    <div class="gallery">
+    <figure class="reel-fig rise" style="margin:0 0 22px">
+        <div class="reel reel--wide">
+          <video src="assets/media/r2d2-parts.mp4" poster="assets/media/r2d2-parts.jpg" muted loop playsinline preload="none"
+            aria-label="An exploded 3D view of the printed parts assembling into the chassis."></video>
+          <div class="reel__corners"></div>
+          <div class="reel__hud"><span class="reel__rec">3D-printed decks · exploded</span><span class="reel__tc">00:00.00</span></div>
+          <button class="reel__toggle" aria-label="Play clip">&#9654;</button>
+        </div>
+        <figcaption class="figcap"><span class="muted">Every deck is printed: motor clamps, chassis, power-bank holder, Pi deck, LIDAR level.</span></figcaption>
+      </figure>
+      <div class="gallery">
       <figure class="shot">
         <img src="assets/img/build-front.jpg" loading="lazy" decoding="async" alt="Front view of the robot showing the LIDAR mounted directly above the webcam.">
         <figcaption><b>Front elevation</b>Camera and LIDAR share an optical axis, so a bearing from the
@@ -520,6 +535,10 @@ details.more+details.more{margin-top:12px}
         <img src="assets/img/build-deck.jpg" loading="lazy" decoding="async" alt="Three-quarter view showing the Raspberry Pi, wiring loom, battery and XT60 connector.">
         <figcaption><b>Power and compute deck</b>The Pi sits on the middle deck with the loom routed to
           the edges; the pack and its XT60 live on the bottom deck, keeping mass low over the axle.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/img/build-bench.jpg" loading="lazy" decoding="async" alt="The robot on a cluttered workbench mid-build, surrounded by tools and wiring." style="object-position:50% 60%">
+        <figcaption><b>On the bench</b>Mid-build, between a soldering iron and a pile of jumper wires.</figcaption>
       </figure>
       <figure class="shot">
         <img src="assets/img/build-camera.jpg" loading="lazy" decoding="async" alt="Close-up of the webcam mounted on the top deck of the robot.">
